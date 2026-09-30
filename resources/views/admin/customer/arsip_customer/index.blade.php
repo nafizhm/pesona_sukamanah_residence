@@ -44,7 +44,7 @@
     <script>
         $(function() {
             var permissions = @json($permissions);
-            var showActionColumn = (permissions['edit'] == 1 || permissions['hapus'] == 1);
+            var showActionColumn = permissions['hapus'] == 1;
             var table = $('.data-table').DataTable({
                 processing: false,
                 serverSide: false,
@@ -105,13 +105,15 @@
             const form = $(this).closest('form');
 
             Swal.fire({
-                title: 'Apakah Anda yakin?',
-                text: 'Data ini akan dihapus secara permanen!',
+                title: 'Hapus permanen arsip customer?',
+                text: 'Data customer yang dipilih akan dihapus permanen dan tidak dapat dikembalikan.',
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonText: '<span class="swal-btn-text">Ya, Hapus</span>',
+                confirmButtonText: '<span class="swal-btn-text">Ya, Hapus Permanen</span>',
                 cancelButtonText: 'Batal',
                 showLoaderOnConfirm: false,
+                allowOutsideClick: () => !Swal.getConfirmButton()?.disabled,
+                allowEscapeKey: () => !Swal.getConfirmButton()?.disabled,
                 buttonsStyling: false,
                 customClass: {
                     confirmButton: 'btn btn-danger mx-2',
@@ -130,9 +132,8 @@
                             url: form.attr('action'),
                             method: 'POST',
                             data: form.serialize(),
-                            success: function() {
-                                audio.play();
-                                toastr.success("Data telah dihapus!", "BERHASIL", {
+                            success: function(response) {
+                                toastr.success(response.message || "Data arsip customer telah dihapus permanen!", "BERHASIL", {
                                     progressBar: true,
                                     timeOut: 3500,
                                     positionClass: "toast-bottom-right"
@@ -141,17 +142,18 @@
                                 $('.data-table').DataTable().ajax.reload(null,
                                     false);
                                 Swal.close();
+                                resolve(true);
                             },
-                            error: function() {
-                                audio.play();
-                                toastr.error("Gagal menghapus data.", "GAGAL!", {
+                            error: function(xhr) {
+                                toastr.error(xhr.responseJSON?.message || "Gagal menghapus data.", "GAGAL!", {
                                     progressBar: true,
                                     timeOut: 3500,
                                     positionClass: "toast-bottom-right"
                                 });
 
-                                btnText.innerHTML = `Ya, Hapus`;
+                                btnText.innerHTML = `Ya, Hapus Permanen`;
                                 confirmBtn.disabled = false;
+                                resolve(false);
                             }
                         });
                     });

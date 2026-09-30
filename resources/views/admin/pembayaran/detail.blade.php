@@ -94,7 +94,7 @@
                             </div>
 
                             <div class="form-group row">
-                                <label class="control-label col-sm-4">SBUM</label>
+                                <label class="control-label col-sm-4">DP ke Bank</label>
                                 <div class="col-sm-5">
                                     <div class="input-group">
                                         <div class="input-group-prepend">
@@ -433,10 +433,12 @@
                                 <select name="id_kategori_transaksi" id="id_kategori_transaksi"
                                     class="form-control select-kategori-transaksi">
                                     <option value=""></option>
-                                    @foreach ($kategoriTransaksiPemasukan as $data)
-                                        <option value="{{ $data->id }}">{{ $data->kategori }}</option>
-                                    @endforeach
+                                    <option value="4" data-kategori-kwitansi="Booking Fee">Booking Fee</option>
+                                    <option value="6" data-kategori-kwitansi="Biaya Proses">Biaya Proses</option>
+                                    <option value="8" data-kategori-kwitansi="DP/Uang Muka">DP/Uang Muka</option>
+                                    <option value="5" data-kategori-kwitansi="Pelunasan">Pelunasan</option>
                                 </select>
+                                <input type="hidden" name="keterangan_kategori" id="keterangan_kategori">
                             </div>
 
                             <label class="col-sm-2 col-form-label label-tagihan d-none">Tagihan</label>
@@ -448,14 +450,6 @@
                                         </option>
                                     @endforeach
                                 </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group row">
-                            <label class="col-sm-3 col-form-label">Keterangan Kategori</label>
-                            <div class="col-sm-6">
-                                <input name="keterangan_kategori" id="keterangan_kategori" class="form-control"
-                                    type="text" placeholder="Contoh: DP Tahap 1">
                             </div>
                         </div>
 
@@ -706,6 +700,9 @@
         $(document).ready(function() {
             $('#id_kategori_transaksi').on('change', function() {
                 let val = $(this).val();
+                $('#keterangan_kategori').val(
+                    $(this).find(':selected').data('kategori-kwitansi') || ''
+                );
                 if (val == 17) {
                     $('.label-tagihan').removeClass('d-none');
                     $('.div-tagihan').removeClass('d-none');
@@ -933,7 +930,7 @@
                 success: function(response) {
                     if (response.status === 'success') {
                         audio.play();
-                        toastr.success("SBUM berhasil diupdate!", "BERHASIL", {
+                        toastr.success("DP ke Bank berhasil diupdate!", "BERHASIL", {
                             progressBar: true,
                             timeOut: 3500,
                             positionClass: "toast-bottom-right",
@@ -947,7 +944,7 @@
                 },
                 error: function(xhr) {
                     audio.play();
-                    let message = xhr.responseJSON?.message || "Gagal mengupdate SBUM!";
+                    let message = xhr.responseJSON?.message || "Gagal mengupdate DP ke Bank!";
                     toastr.error(message, "GAGAL!", {
                         progressBar: true,
                         timeOut: 3500,

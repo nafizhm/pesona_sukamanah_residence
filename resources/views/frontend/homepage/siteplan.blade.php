@@ -80,7 +80,7 @@
                                     $warna = $pt->progres->warna;
                                 }
                             } else {
-                                if ($pt->status == 1) {
+                                if ($pt->is_booked) {
                                     $warna = '#42f202';
                                 }
                             }

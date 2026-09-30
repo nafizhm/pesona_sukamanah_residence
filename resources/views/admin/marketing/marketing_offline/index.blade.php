@@ -16,7 +16,7 @@
                                     <h3 class="font-weight-bold text-lg">Data Marketing</h3>
                                     <div class="d-flex align-items-center">
                                         @if ($permissions['tambah'])
-                                            <button type="button" class="btn btn-sm btn-primary" data-toggle="modal"
+                                            <button type="button" class="btn btn-sm btn-primary add-marketing-button" data-toggle="modal"
                                                 data-target="#modalForm">
                                                 <i class="fas fa-plus"></i> Tambah Marketing
                                             </button>
@@ -241,7 +241,16 @@
             });
         });
 
-        $(document).on('click', '[data-target="#modalForm"]', function() {
+        $(document).on('click', '.add-marketing-button', function() {
+            // Pastikan modal Tambah tidak mewarisi ID dari modal Edit sebelumnya.
+            // Tanpa ini, form dapat mengirim PUT dan memperbarui marketing lama.
+            $('#formData')[0].reset();
+            $('#primary_id').val('');
+            $('.is-invalid').removeClass('is-invalid');
+            $('.invalid-feedback').remove();
+            $('#jenis_kelamin').val('').trigger('change');
+            $('#status').val('').trigger('change');
+            $('#previewFoto').html('<span style="color: #6c757d;">Tidak ada foto</span>');
             $('#modalFormLabel').text('Tambah Marketing');
         });
 
@@ -271,6 +280,7 @@
 
         $('#modalForm').on('hidden.bs.modal', function() {
             $('#formData')[0].reset();
+            $('#primary_id').val('');
             $('.is-invalid').removeClass('is-invalid');
             $('.invalid-feedback').remove();
             $('#jenis_kelamin').val('').trigger('change');

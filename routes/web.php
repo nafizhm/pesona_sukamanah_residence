@@ -21,6 +21,7 @@ use App\Http\Controllers\Marketing\MarketingOfflineController;
 use App\Http\Controllers\Master\BankKPRController;
 use App\Http\Controllers\Master\BankTransaksiController;
 use App\Http\Controllers\Master\KavlingController;
+use App\Http\Controllers\Master\JenisBerkasController;
 use App\Http\Controllers\Master\LokasiKavlingController;
 use App\Http\Controllers\Master\NotarisController;
 use App\Http\Controllers\Master\PerusahaanController;
@@ -248,6 +249,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('get-kavling/{idLokasi}', [CustomerController::class, 'getKavling'])->name('customer.getKavling');
         Route::get('get-harga-kavling/{id_kavling}', [CustomerController::class, 'getHargaKavling'])->name('customer.getHargaKavling');
         Route::get('customer/cetak', [CustomerController::class, 'cetakData'])->name('customer.cetak');
+        Route::get('customer/{id_customer}/cetak-pdf', [CustomerController::class, 'cetakDetail'])->name('customer.cetak-detail');
         Route::get('customer/{id_customer}/subsidi-cetak', [CustomerController::class, 'cetakFormSubsidi'])->name('subsidi.cetak');
         Route::get('customer/print-document/{template_code}/{id_customer}', [CustomerController::class, 'printDocument'])->name('customer.print-document');
 
@@ -276,6 +278,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('laporan-arus-kas/export-excel', [LaporanArusKasController::class, 'exportExcel'])->name('laporan-arus-kas.exportExcel');
 
         Route::resource('pemasukan', PemasukanController::class);
+        Route::get('pengeluaran/{id}/cetak', [PengeluaranController::class, 'cetak'])->name('pengeluaran.cetak');
         Route::resource('pengeluaran', PengeluaranController::class);
         Route::resource('hutang', HutangController::class);
         Route::resource('piutang', PiutangController::class);
@@ -315,6 +318,7 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('retensi', RetensiController::class);
         Route::resource('notaris', NotarisController::class);
         Route::resource('upload-template', UploadTemplateController::class);
+        Route::resource('jenis-berkas', JenisBerkasController::class)->only(['index', 'store', 'edit', 'update', 'destroy']);
     });
 
     Route::prefix('admin/pengaturan')->group(function () {

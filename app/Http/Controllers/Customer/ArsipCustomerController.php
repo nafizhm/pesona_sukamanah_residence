@@ -3,11 +3,12 @@ namespace App\Http\Controllers\Customer;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Pengaturan\HakAksesController;
-use App\Models\ArsipCustomer;
 use App\Models\Customer;
+use App\Models\KavlingPeta;
 use App\Traits\LogAktivitasTrait;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
 
 class ArsipCustomerController extends Controller
@@ -73,7 +74,7 @@ class ArsipCustomerController extends Controller
                         $btn .= '<form action="' . e($deleteUrl) . '" method="POST" style="display:inline;">
                             ' . csrf_field() . method_field('DELETE') . '
                             <button type="submit" class="delete-button btn btn-danger btn-sm">
-                                Kembalikan
+                                Hapus
                             </button>
                          </form>';
                     }
@@ -91,11 +92,22 @@ class ArsipCustomerController extends Controller
     
     public function destroy($id)
     {
-        $data = ArsipCustomer::findOrFail($id);
-        $this->logDelete('Arsip Customer', $data->id);
-        $data->delete();
+        DB::transaction(function () use ($id) {
+            $data = Customer::where('stt_arsip', 1)->lockForUpdate()->findOrFail($id);
 
-        return response()->json(['status' => 'success']);
+            // Lepaskan hanya kavling yang masih menunjuk customer ini.
+            KavlingPeta::where('id_customer', $data->id)->update([
+                'id_customer' => null,
+            ]);
+
+            $this->logDelete('Arsip Customer (Permanen)', $data->id);
+            $data->delete();
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Data arsip customer berhasil dihapus permanen.',
+        ]);
     }
 
 }

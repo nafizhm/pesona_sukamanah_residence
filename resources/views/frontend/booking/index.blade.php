@@ -1097,15 +1097,30 @@
                     window.location.href = "{{ route('booking.sukses') }}";
                 },
                 error: function(xhr) {
+                    let response = xhr.responseJSON || {};
+
                     if (xhr.status === 422) {
                         audio.play();
-                        toastr.error("Ada inputan yang salah!", "GAGAL!", {
+                        let errors = response.errors || {};
+                        let messages = [];
+
+                        $.each(errors, function(key, val) {
+                            messages.push(Array.isArray(val) ? val[0] : val);
+                        });
+
+                        let errorMessage = messages.length
+                            ? messages.join('<br>')
+                            : (response.message || 'Ada inputan yang salah.');
+
+                        toastr.error(errorMessage, "Data booking belum valid", {
                             progressBar: true,
-                            timeOut: 3500,
+                            timeOut: 8000,
+                            extendedTimeOut: 3000,
+                            closeButton: true,
+                            escapeHtml: false,
                             positionClass: "toast-bottom-right",
                         });
 
-                        let errors = xhr.responseJSON.errors;
                         $.each(errors, function(key, val) {
                             if (key.includes('.')) {
                                 let parts = key.split('.');
@@ -1136,6 +1151,32 @@
                                     val[0] + '</strong></span>'
                                 );
                             }
+                        });
+
+                        let firstInvalid = $('.is-invalid').first();
+                        if (firstInvalid.length) {
+                            $('html, body').animate({
+                                scrollTop: firstInvalid.closest('.form-group').offset().top - 100
+                            }, 400);
+                            firstInvalid.trigger('focus');
+                        }
+                    } else {
+                        let message = response.message;
+
+                        if (!message && xhr.status === 413) {
+                            message = 'Ukuran total file terlalu besar. Maksimal setiap file adalah 2 MB.';
+                        }
+
+                        if (!message) {
+                            message = 'Booking gagal disimpan. Periksa koneksi lalu coba kembali.';
+                        }
+
+                        toastr.error(message, "Gagal menyimpan booking", {
+                            progressBar: true,
+                            timeOut: 8000,
+                            extendedTimeOut: 3000,
+                            closeButton: true,
+                            positionClass: "toast-bottom-right",
                         });
                     }
                     spinner.addClass('d-none');

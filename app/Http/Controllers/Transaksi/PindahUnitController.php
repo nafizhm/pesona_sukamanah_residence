@@ -111,7 +111,7 @@ class PindahUnitController extends Controller
 
         $tanggalSekarang = Carbon::now('Asia/Jakarta')->format('Y-m-d');
         $metodeBayar     = MetodeBayar::all();
-        $kavBaru         = KavlingPeta::whereNull('id_customer')->get();
+        $kavBaru         = KavlingPeta::available()->orderBy('kode_kavling')->get();
         $bankList        = Bank::all();
 
         return view(
@@ -167,6 +167,11 @@ class PindahUnitController extends Controller
         try {
 
             $customer = Customer::with('lokasi')->find($request->id_customer);
+            $targetKavling = KavlingPeta::lockForUpdate()->findOrFail($request->id_kavling_baru);
+            if (! KavlingPeta::whereKey($targetKavling->id)->available()->exists()) {
+                DB::rollBack();
+                return response()->json(['message' => 'Kavling tujuan sudah digunakan booking atau customer lain.'], 422);
+            }
 
             if ($request->hasFile('lampiran_bukti')) {
                 $lampiran_bukti          = $request->file('lampiran_bukti');
@@ -217,12 +222,12 @@ class PindahUnitController extends Controller
 
             $kavlingBaru              = KavlingPeta::with('lokasi')->find($request->id_kavling_baru);
             $kavlingBaru->id_customer = $request->id_customer;
-            $kavlingBaru->status      = 2;
+
             $kavlingBaru->save();
 
             $kavlingLama              = KavlingPeta::find($customer->id_kavling);
             $kavlingLama->id_customer = null;
-            $kavlingLama->status      = 0;
+
             $kavlingLama->save();
 
             $customer->id_kavling = $request->id_kavling_baru;
@@ -288,13 +293,13 @@ class PindahUnitController extends Controller
 
             if ($kavlingBaru) {
                 $kavlingBaru->id_customer = null;
-                $kavlingBaru->status      = 0;
+
                 $kavlingBaru->save();
             }
 
             if ($kavlingLama) {
                 $kavlingLama->id_customer = $customer->id;
-                $kavlingLama->status      = 2;
+
                 $kavlingLama->save();
             }
 

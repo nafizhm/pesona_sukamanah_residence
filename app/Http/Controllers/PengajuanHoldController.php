@@ -81,16 +81,12 @@ class PengajuanHoldController extends Controller
                     return $namaLokasi . '<br>' . $kodeKavling;
                 })
                 ->addColumn('action', function ($row) use ($permissions): string {
-                    $editUrl     = route('pengajuan-hold.edit', $row->id);
                     $deleteUrl   = route('pengajuan-hold.destroy', $row->id);
-                    $lampiranUrl = route('pengajuan-hold.show', $row->id);
                     $verifUrl    = route('pengajuan-hold.verifikasi', $row->id);
 
                     $btn = '<div class="text-start">';
 
                     if ($permissions['edit'] && $row->stt_reg != 2) {
-                        $btn .= '<button class="btn btn-warning btn-xs mr-1 edit-button" data-id="' . e($row->id) . '" data-url="' . e($editUrl) . '">Edit</button>';
-                        $btn .= '<a class="btn btn-success btn-xs mr-1" href="' . e($lampiranUrl) . '">Lampiran</a>';
                         $btn .= '<a class="btn btn-primary btn-xs mr-1" href="' . e($verifUrl) . '">Verifikasi</a>';
                     }
 
@@ -323,8 +319,10 @@ class PengajuanHoldController extends Controller
 
                 PengajuanHoldTempo::create($tempoData);
             } else {
-                KavlingPeta::find($data->id_kavling)->update(['status' => 0]);
-                KavlingPeta::find($request->id_kavling)->update(['status' => 1]);
+                $kavling = KavlingPeta::lockForUpdate()->findOrFail($request->id_kavling);
+                if (! KavlingPeta::whereKey($kavling->id)->available($data->id)->exists()) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['id_kavling' => 'Kavling sudah digunakan booking atau customer lain.']);
+                }
 
                 $data->update($db);
                 $this->logEdit('Pengajuan Hold', $data->id);
@@ -475,10 +473,8 @@ class PengajuanHoldController extends Controller
     public function getKavling($id)
     {
         $kavling = KavlingPeta::where('id_lokasi', $id)
-            ->where(function ($query) {
-                $query->where('status', 0)
-                      ->orWhereNull('status');
-            })
+            ->available()
+            ->orderBy('kode_kavling', 'asc')
             ->get(['id', 'kode_kavling']);
 
         return response()->json($kavling);
@@ -555,9 +551,9 @@ class PengajuanHoldController extends Controller
             'alamat_ktp'       => 'required',
             'alamat_domisili'  => 'required',
             'email'            => 'nullable|email',
-            'id_lokasi'        => 'required',
-            'id_kavling'       => 'required',
-            'total_harga'      => 'required',
+            'id_lokasi'        => 'required|exists:lokasi_kavling,id',
+            'id_kavling'       => 'required|exists:kavling_peta,id',
+            'total_harga'      => 'required|numeric|gt:0',
             'id_marketing'     => 'required',
             'status_pernikahan'=> 'required',
             'booking_fee'      => 'required|gt:0',
@@ -585,9 +581,13 @@ class PengajuanHoldController extends Controller
             'alamat_domisili.required'  => 'Alamat domisili wajib diisi.',
             'email.email'               => 'Format email tidak valid.',
             'id_lokasi.required'        => 'Lokasi wajib dipilih.',
+            'id_lokasi.exists'          => 'Lokasi yang dipilih tidak ditemukan.',
             'status_pernikahan.required'=> 'Status pernikahan wajib dipilih.',
             'id_kavling.required'       => 'Kavling wajib dipilih.',
+            'id_kavling.exists'         => 'Kavling yang dipilih tidak ditemukan.',
             'total_harga.required'      => 'Total harga wajib diisi.',
+            'total_harga.numeric'       => 'Total harga harus berupa angka.',
+            'total_harga.gt'            => 'Harga kavling belum ditentukan.',
             'id_marketing.required'     => 'Marketing wajib dipilih.',
             'booking_fee.required'      => 'Booking fee wajib diisi.',
             'booking_fee.gt'            => 'Booking fee harus lebih dari 0.',
@@ -611,8 +611,18 @@ class PengajuanHoldController extends Controller
         ]);
 
         $kavling = KavlingPeta::find($request->id_kavling);
-        if ($kavling && collect($kavling->rincian_biaya ?? [])->sum('nilai') <= 0) {
+        if ((int) $kavling->id_lokasi !== (int) $request->id_lokasi) {
             return response()->json([
+                'message' => 'Kavling tidak sesuai dengan lokasi yang dipilih.',
+                'errors' => [
+                    'id_kavling' => ['Kavling tidak sesuai dengan lokasi yang dipilih.']
+                ]
+            ], 422);
+        }
+
+        if (collect($kavling->rincian_biaya ?? [])->sum('nilai') <= 0) {
+            return response()->json([
+                'message' => 'Harga kavling belum ditentukan.',
                 'errors' => [
                     'id_kavling' => ['Harga kavling belum ditentukan.']
                 ]
@@ -621,6 +631,12 @@ class PengajuanHoldController extends Controller
 
         DB::beginTransaction();
         try {
+            $kavling = KavlingPeta::lockForUpdate()->findOrFail($request->id_kavling);
+            if (! KavlingPeta::whereKey($kavling->id)->available()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'id_kavling' => 'Kavling sudah digunakan booking atau customer lain.',
+                ]);
+            }
 
             $folder = public_path('assets/booking');
 
@@ -683,7 +699,6 @@ class PengajuanHoldController extends Controller
                 'stt_reg'           => 1,
             ]);
 
-            KavlingPeta::find($request->id_kavling)->update(['status' => 1]);
 
             DB::commit();
 
@@ -697,14 +712,23 @@ class PengajuanHoldController extends Controller
                 'status'  => 'success',
                 'message' => 'Booking berhasil.',
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            Log::info($e->getMessage());
+            if ($e instanceof \Illuminate\Validation\ValidationException) {
+                throw $e;
+            }
+            Log::error('Gagal menyimpan booking.', [
+                'exception' => $e,
+                'nik' => $request->nik,
+                'id_lokasi' => $request->id_lokasi,
+                'id_kavling' => $request->id_kavling,
+            ]);
 
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Gagal memperbarui Booking.',
-                'error'   => $e->getMessage(),
+                'message' => app()->hasDebugModeEnabled()
+                    ? 'Booking gagal disimpan: ' . $e->getMessage()
+                    : 'Booking gagal disimpan karena terjadi kesalahan pada server. Silakan coba lagi atau hubungi admin.',
             ], 500);
         }
     }
@@ -786,6 +810,15 @@ class PengajuanHoldController extends Controller
             'foto_pemohon' => 'Foto Pemohon',
         ];
 
+        // Folder ini dapat belum ada pada instalasi baru di hosting. Pastikan
+        // tersedia sebelum lampiran booking dipindahkan ke data customer.
+        foreach ([
+            public_path('assets/customer'),
+            public_path('assets/keuangan/pemasukan'),
+        ] as $directory) {
+            File::ensureDirectoryExists($directory, 0755, true);
+        }
+
         $customerFiles = [];
         foreach ($files as $field => $label) {
             $oldPath = public_path('assets/booking/' . $data->$field);
@@ -793,14 +826,16 @@ class PengajuanHoldController extends Controller
             if ($data->$field && File::exists($oldPath)) {
                 $customerPath = public_path('assets/customer/' . $data->$field);
 
-                File::copy($oldPath, $customerPath);
+                if (! File::copy($oldPath, $customerPath)) {
+                    throw new \RuntimeException('Gagal menyalin lampiran customer.');
+                }
 
                 if ($field === 'file_bukti') {
                     $keuanganPath = public_path('assets/keuangan/pemasukan/' . $data->$field);
-                    File::copy($oldPath, $keuanganPath);
+                    if (! File::copy($oldPath, $keuanganPath)) {
+                        throw new \RuntimeException('Gagal menyalin bukti pembayaran.');
+                    }
                 }
-
-                File::delete($oldPath);
 
                 $customerFiles[$field] = $data->$field;
             } else {
@@ -890,42 +925,117 @@ class PengajuanHoldController extends Controller
             $data->tgl_lahir_formatted = null;
         }
 
-        return view('admin.pengajuan_hold.verif', compact('data', 'bankList', 'metodeBayarList'));
+        abort_if((int) $data->stt_reg === 2, 422, 'Booking ini sudah disetujui.');
+        $marketingList = MarketingOffline::orderBy('nama_marketing')->get();
+        $lokasiList = LokasiKavling::orderBy('nama_kavling')->get();
+        $kavlingList = KavlingPeta::available($data->id)->orderBy('kode_kavling', 'asc')->get();
+
+        return view('admin.pengajuan_hold.verif', compact('data', 'bankList', 'metodeBayarList', 'marketingList', 'lokasiList', 'kavlingList'));
     }
 
     public function simpanVerifikasi(Request $request, $id)
     {
         $data = PengajuanHold::with(['kavling', 'lokasi'])->findOrFail($id);
 
-        $this->logCreate('Verifikasi Data Booking', $data->id);
-
         $request->merge([
             'termin_x_cash_b' => $request->termin_x_cash_b ? str_replace('.', '', $request->termin_x_cash_b) : 0,
+            'booking_fee' => str_replace('.', '', (string) $request->booking_fee),
         ]);
 
         $rules = [
-            'stt_reg'         => 'required',
-            'jenis_pembelian' => 'required',
-            'id_metode_bayar' => 'required',
-            'id_bank'         => 'required',
-            'an_surat_cash'   => 'required_if:jenis_pembelian,Pembelian Cash',
-            'termin_x_cash_b' => 'required_if:jenis_pembelian,Cash Bertahap',
+            'stt_reg'         => 'required|in:1,2,3',
+            'jenis_pembelian' => 'nullable|required_if:stt_reg,2|in:Pembelian Cash,Cash Bertahap,KPR',
+            'id_metode_bayar' => 'nullable|required_if:stt_reg,2|exists:metode_bayar,id',
+            'id_bank'         => 'nullable|required_if:stt_reg,2|exists:bank,id',
+            'an_surat_cash'   => 'nullable|string|max:255',
+            'termin_x_cash_b' => 'integer|min:0',
+            'tgl_booking' => 'required|date',
+            'nama_lengkap' => 'required|string|max:255',
+            'nik' => 'required|string|max:255',
+            'jenis_kelamin' => 'required|in:Laki-laki,Perempuan',
+            'tempat_lahir' => 'required|string|max:255',
+            'tgl_lahir' => 'required|date',
+            'alamat_ktp' => 'required|string',
+            'alamat_domisili' => 'nullable|string',
+            'email' => 'nullable|email|max:255',
+            'no_telp' => 'required|string|max:255',
+            'id_lokasi' => 'required|exists:lokasi_kavling,id',
+            'id_kavling' => 'required|exists:kavling_peta,id',
+            'id_marketing' => 'required|integer|min:0',
+            'jenis_perumahan' => 'required|in:Subsidi,Komersil',
+            'booking_fee' => 'required|numeric|gt:0',
         ];
+        foreach (['npwp', 'no_bpjs_kes', 'nama_saudara', 'no_telp_saudara', 'pekerjaan', 'status_pernikahan', 'nama_p', 'nik_p'] as $field) {
+            $rules[$field] = 'nullable|string|max:255';
+        }
+        $attachmentFields = ['foto_ktp', 'foto_npwp', 'foto_kk', 'foto_bpjs', 'foto_ktp_p', 'file_bukti', 'foto_pemohon'];
+        foreach ($attachmentFields as $field) {
+            $rules[$field] = $field === 'file_bukti'
+                ? 'nullable|file|mimes:jpg,jpeg,png,webp,pdf|max:10240'
+                : 'nullable|image|mimes:jpg,jpeg,png,webp|max:10240';
+        }
+        if ((int) $request->id_marketing !== 0) {
+            $rules['id_marketing'] .= '|exists:marketing_offline,id';
+        }
+        if ((int) $request->stt_reg === 2 && $request->jenis_pembelian === 'Pembelian Cash') {
+            $rules['an_surat_cash'] = 'required|string|max:255';
+        }
+        if ((int) $request->stt_reg === 2 && $request->jenis_pembelian === 'Cash Bertahap') {
+            $rules['termin_x_cash_b'] = 'required|integer|min:1';
+        }
 
         $messages = [
             'stt_reg.required'            => 'Status Verifikasi wajib dipilih!',
-            'jenis_pembelian.required'    => 'Jenis Pembelian wajib dipilih!',
-            'id_metode_bayar.required'    => 'Metode Pembayaran wajib dipilih!',
-            'id_bank.required'            => 'Bank wajib dipilih!',
+            'stt_reg.in'                  => 'Status verifikasi harus Pending, Disetujui atau Ditolak.',
+            'jenis_pembelian.required_if' => 'Jenis Pembelian wajib dipilih saat booking disetujui!',
+            'jenis_pembelian.in'          => 'Jenis Pembelian tidak valid.',
+            'id_metode_bayar.required_if' => 'Metode Pembayaran wajib dipilih saat booking disetujui!',
+            'id_metode_bayar.exists'      => 'Metode Pembayaran yang dipilih tidak ditemukan.',
+            'id_bank.required_if'         => 'Rekening Pembayaran wajib dipilih saat booking disetujui!',
+            'id_bank.exists'              => 'Rekening Pembayaran yang dipilih tidak ditemukan.',
             'an_surat_cash.required_if'   => 'Atas Nama Surat wajib diisi!',
             'termin_x_cash_b.required_if' => 'Termin wajib diisi!',
+            'termin_x_cash_b.integer'     => 'Termin harus berupa angka.',
+            'termin_x_cash_b.min'         => 'Termin minimal 1 bulan.',
         ];
 
-        $request->validate($rules, $messages);
+        $validated = $request->validate($rules, $messages);
 
+        $newFiles = [];
+        $obsoleteFiles = [];
         DB::beginTransaction();
         try {
+            $data = PengajuanHold::lockForUpdate()->findOrFail($id);
+            if ((int) $data->stt_reg === 2) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['stt_reg' => 'Booking ini sudah disetujui.']);
+            }
+            $kavling = KavlingPeta::lockForUpdate()->findOrFail($validated['id_kavling']);
+            if ((int) $kavling->id_lokasi !== (int) $validated['id_lokasi'] ||
+                ! KavlingPeta::whereKey($kavling->id)->available($data->id)->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['id_kavling' => 'Kavling tidak tersedia atau tidak sesuai lokasi.']);
+            }
+            $bookingValues = collect($validated)->except(array_merge($attachmentFields, ['stt_reg']))->all();
+            $bookingValues['total_harga'] = collect($kavling->rincian_biaya ?? [])->sum('nilai');
+            foreach ($attachmentFields as $field) {
+                if ($request->hasFile($field)) {
+                    File::ensureDirectoryExists(public_path('assets/booking'));
+                    $file = $request->file($field);
+                    $filename = (string) \Illuminate\Support\Str::uuid() . '.' . $file->extension();
+                    $newFiles[] = $filename;
+                    $file->move(public_path('assets/booking'), $filename);
+                    if ($data->$field) {
+                        $obsoleteFiles[] = public_path('assets/booking/' . $data->$field);
+                    }
+                    $bookingValues[$field] = $filename;
+                }
+            }
+            $data->update($bookingValues);
+            $data->load(['kavling', 'lokasi']);
             if ($request->stt_reg == 2) {
+                if (! $data->kavling || ! $data->lokasi) {
+                    throw new \RuntimeException('Data kavling atau lokasi booking tidak ditemukan.');
+                }
+
                 if ($request->jenis_pembelian === 'Pembelian Cash') {
                     $db = [
                         'stt_reg'         => $request->stt_reg,
@@ -1003,18 +1113,48 @@ class PengajuanHoldController extends Controller
                 $data->update($db);
             }
 
-            KavlingPeta::where('id', $data->id_kavling)->update(['status' => 2]);
 
+            $this->logCreate('Verifikasi Data Booking', $data->id);
             DB::commit();
 
-            return response()->json(['status' => 'success']);
-        } catch (\Exception $e) {
+            if ((int) $request->stt_reg === 2) {
+                foreach ($attachmentFields as $field) {
+                    if ($data->$field) {
+                        $obsoleteFiles[] = public_path('assets/booking/' . $data->$field);
+                    }
+                }
+            }
+            try {
+                File::delete($obsoleteFiles);
+            } catch (\Throwable $cleanupError) {
+                Log::warning('Data booking tersimpan, tetapi lampiran lama belum dapat dibersihkan.', ['pengajuan_hold_id' => $data->id]);
+            }
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Verifikasi booking berhasil disimpan.',
+            ]);
+        } catch (\Throwable $e) {
             DB::rollBack();
-            Log::info($e->getMessage());
+            foreach ($newFiles as $filename) {
+                File::delete([
+                    public_path('assets/booking/' . $filename),
+                    public_path('assets/customer/' . $filename),
+                    public_path('assets/keuangan/pemasukan/' . $filename),
+                ]);
+            }
+            if ($e instanceof \Illuminate\Validation\ValidationException) {
+                throw $e;
+            }
+            Log::error('Gagal menyimpan verifikasi booking.', [
+                'pengajuan_hold_id' => $data->id,
+                'request'           => $request->except(['_token']),
+                'exception'         => $e,
+            ]);
 
             return response()->json([
                 'status' => 'error',
-                'error'  => $e->getMessage(),
+                'message' => 'Verifikasi booking gagal disimpan: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -1041,7 +1181,6 @@ class PengajuanHoldController extends Controller
                 }
             }
 
-            KavlingPeta::find($data->id_kavling)->update(['status' => 0]);
 
             $this->logDelete('Pengajuan Hold', $id);
             $data->delete();

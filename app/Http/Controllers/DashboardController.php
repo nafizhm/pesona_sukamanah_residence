@@ -61,7 +61,7 @@ class DashboardController extends Controller
                 'kpr'          => Customer::where('id_lokasi', $id)->where('jenis_pembelian', 'KPR')->count(),
                 'cash'         => Customer::where('id_lokasi', $id)->where('jenis_pembelian', 'Pembelian Cash')->count(),
                 'kredit'       => Customer::where('id_lokasi', $id)->where('jenis_pembelian', 'Cash Bertahap')->count(),
-                'hold'         => KavlingPeta::where('id_lokasi', $id)->where('status', 1)->count(),
+                'hold'         => KavlingPeta::where('id_lokasi', $id)->whereDoesntHave('customer')->whereHas('activeBookings')->count(),
             ];
 
             $totalSemua['jumlah'] += $data['jumlah'];
@@ -74,7 +74,7 @@ class DashboardController extends Controller
                 $key = strtolower(str_replace(' ', '_', $status->short_name));
 
                 if ($status->id == 1) {
-                    $data[$key] = KavlingPeta::where('id_lokasi', $id)->where('status', 0)->count();
+                    $data[$key] = KavlingPeta::where('id_lokasi', $id)->available()->count();
                 } else {
                     $data[$key] = Customer::where('id_lokasi', $id)
                         ->where('id_status_progres', $status->id)

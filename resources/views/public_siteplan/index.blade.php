@@ -349,7 +349,7 @@
                                                     if (in_array($status, $allowedStatus)) {
                                                         $warna = $pt->customer->progres->warna ?? '#ffffff';
                                                     }
-                                                } elseif ($pt->status == 1) {
+                                                } elseif ($pt->is_booked) {
                                                     $warna = '#42f202';
                                                 }
                                             @endphp

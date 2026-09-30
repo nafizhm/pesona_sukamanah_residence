@@ -158,69 +158,43 @@ class PembayaranController extends Controller
             $perusahaan   = $perusahaanId ? Perusahaan::find($perusahaanId) : null;
         }
 
-        $namaPerusahaan   = $lokasi->nama_kavling ?? 'Nama Perusahaan Belum diisi';
-        $alamatPerusahaan = $perusahaan->alamat_perusahaan ?? 'Alamat Belum diisi';
-        $telpPerusahaan   = $perusahaan->telp_perusahaan ?? '-';
         $profilPerusahaan = PengaturanProfil::first();
         $namaProfil       = $profilPerusahaan->nama_perusahaan ?? 'PT. ALAM INDAH SELALU';
         $telpProfil       = $profilPerusahaan->telp ?? '0778-4173387';
-        $kopPath         = public_path('assets/img/kop-kwitansi.jpg');
-        $pengaturanMedia = PengaturanMedia::where('jenis_data', 'Logo Rekap')->first();
-        $logoPath        = null;
-        if ($pengaturanMedia && $pengaturanMedia->nama_file) {
-            $logoPath = public_path('config_media/' . $pengaturanMedia->nama_file);
-        }
+        $kopPath          = public_path('assets/img/kop-surat-rekap.jpg');
+        $footerPath       = public_path('assets/img/foot-surat-rekap.jpg');
 
-        $pdf = new TCPDF('P', 'mm', 'A4');
-        $pdf->SetTitle('Rekap Pembayaran' . ' - ' . $customer->nama_lengkap);
-        $pdf->AddPage();
+        abort_unless(file_exists($kopPath) && file_exists($footerPath), 500, 'Aset kop atau footer rekap tidak ditemukan.');
 
-        if (file_exists($kopPath)) {
-            $pdf->Image($kopPath, 5, 5, 200, 0, 'JPG', '', '', false, 100);
+        $pdf = new class($kopPath, $footerPath) extends TCPDF {
+            private string $kopSuratPath;
+            private string $footerSuratPath;
 
-            $pdf->SetFont('helvetica', 'B', 18);
-            $pdf->SetTextColor(0, 0, 0);
-            $pdf->SetXY(60, 16);
-            $pdf->Cell(140, 5, strtoupper($namaPerusahaan), 0, 1, 'C');
-
-            $pdf->SetFont('helvetica', '', 9);
-            $pdf->SetX(60);
-            $pdf->Cell(140, 4, $alamatPerusahaan, 0, 1, 'C');
-            $pdf->SetX(60);
-            $pdf->Cell(140, 4, 'Telp: ' . $telpPerusahaan, 0, 1, 'C');
-
-            $lineY1 = 33.5;
-            $pdf->SetLineWidth(0.3);
-            $pdf->SetDrawColor(0, 0, 0);
-            $pdf->Line(9, $lineY1, 200, $lineY1);
-
-            $pdf->SetY(48);
-        } else {
-            if ($logoPath && file_exists($logoPath)) {
-                $pdf->Image($logoPath, 15, 15, 25);
+            public function __construct(string $kopSuratPath, string $footerSuratPath)
+            {
+                parent::__construct('P', 'mm', 'A4');
+                $this->kopSuratPath = $kopSuratPath;
+                $this->footerSuratPath = $footerSuratPath;
             }
 
-            $pdf->SetXY(57, 14);
+            public function Header(): void
+            {
+                $this->Image($this->kopSuratPath, 10, 6, 190, 0, 'JPG', '', '', false, 150);
+            }
 
-            $pdf->SetFont('helvetica', 'B', 20);
-            $pdf->SetTextColor(0, 0, 0);
-            $pdf->Cell(0, 7, strtoupper($namaPerusahaan), 0, 1, 'L');
-
-            $pdf->SetFont('Times', '', 9);
-            $pdf->SetTextColor(0, 0, 0);
-            $pdf->Cell(0, 5, $alamatPerusahaan, 0, 1, 'C');
-            $pdf->Cell(0, 5, 'Telp: ' . $telpPerusahaan, 0, 1, 'C');
-
-            $pdf->SetXY(0, 32);
-            $pdf->SetDrawColor(0, 0, 0);
-            $pdf->SetLineWidth(0.7);
-            $pdf->Line(10, 42, 200, 42);
-
-            $pdf->SetLineWidth(0.3);
-            $pdf->Line(10, 41, 200, 41);
-
-            $pdf->Ln(10);
-        }
+            public function Footer(): void
+            {
+                $this->Image($this->footerSuratPath, 10, 270, 190, 0, 'JPG', '', '', false, 150);
+            }
+        };
+        $pdf->SetTitle('Rekap Pembayaran' . ' - ' . $customer->nama_lengkap);
+        $pdf->SetMargins(10, 38, 10);
+        $pdf->SetHeaderMargin(0);
+        $pdf->SetFooterMargin(0);
+        $pdf->SetAutoPageBreak(true, 30);
+        $pdf->setPrintHeader(true);
+        $pdf->setPrintFooter(true);
+        $pdf->AddPage();
 
         $pdf->SetFont('Times', 'B', 10);
         $pdf->SetTextColor(218, 0, 0);
@@ -301,7 +275,7 @@ class PembayaranController extends Controller
         $pdf->Cell($valueW, 6, number_format($customer->estimasi_plafon ?? 0, 0, ',', '.'), 0, 1, 'R');
 
         $pdf->SetX($labelX+5);
-        $pdf->Cell($labelW, 6, 'SBUM', 0, 0);
+        $pdf->Cell($labelW, 6, 'DP ke Bank', 0, 0);
         $pdf->Cell(3, 6, ': Rp.', 0, 0);
         $pdf->Cell($valueW, 6, number_format($customer->sbum ?? 0, 0, ',', '.'), 0, 1, 'R');
 
@@ -565,138 +539,102 @@ class PembayaranController extends Controller
             $perusahaan   = $perusahaanId ? Perusahaan::find($perusahaanId) : null;
         }
 
-        $blokNomor = $lokasi && $lokasi->is_cluster
-            ? (($kavling->cluster ?? '-') . '.' . ($kavling->no ?? '-'))
-            : str_replace('-', '.', $kavling->kode_kavling ?? '-');
+        $templatePath = public_path('templates/kwitansi-pembayaran-template.pdf');
+        abort_unless(file_exists($templatePath), 500, 'Template kwitansi pembayaran tidak ditemukan.');
 
-        $namaPerusahaan   = $lokasi->nama_kavling ?? 'Nama Perusahaan Belum diisi';
-        $alamatPerusahaan = $perusahaan->alamat_perusahaan ?? 'Alamat Belum diisi';
-
-        $pageFormat = [140, 210];
-        $pdf = new TCPDF('L', 'mm', $pageFormat, true, 'UTF-8', false);
+        $pdf = new Fpdi('P', 'mm', 'A4', true, 'UTF-8', false);
         $pdf->SetTitle('Kwitansi - ' . ($pembayaran->no_kwitansi ?? '-'));
         $pdf->SetAuthor('Dealaska');
         $pdf->SetMargins(0, 0, 0);
         $pdf->SetAutoPageBreak(false, 0);
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
-        $pdf->AddPage('L', $pageFormat);
+        $pdf->setSourceFile($templatePath);
+        $templateId = $pdf->importPage(1);
+        $pdf->AddPage('P', 'A4');
+        $pdf->useTemplate($templateId, 0, 0, 210, 297);
 
-        $marginL  = 15;
-        $marginR  = 15;
-        $pageW    = 210;
-        $contentW = $pageW - $marginL - $marginR;
+        $tanggal = \Carbon\Carbon::parse($pembayaran->tanggal)
+            ->locale('id')
+            ->translatedFormat('d F Y');
+        $alamat = $nasabah->alamat_domisili ?: ($nasabah->alamat_ktp ?: '-');
+        $hargaJual = (int) ($nasabah->total_harga ?: ($kavling->total_harga ?? 0));
+        $metode = strtolower($pembayaran->metode->jenis_bayar ?? 'tunai');
+        $kategoriKwitansi = strtolower($pembayaran->keterangan_kategori ?: ($pembayaran->keterangan ?? ''));
 
-        $kopPath  = public_path('assets/img/kop-kwitansi.jpg');
-        $logoPath = public_path('templates/logo_rhabayu.jpg');
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->SetFont('times', 'B', 10);
+        $pdf->SetXY(162, 18.7);
+        $pdf->Cell(30, 5, $pembayaran->no_kwitansi ?? '-', 0, 0, 'L');
+        $pdf->SetXY(162, 23.6);
+        $pdf->Cell(30, 5, $tanggal, 0, 0, 'L');
 
+        $pdf->SetFont('times', '', 10);
+        $pdf->SetXY(57, 38.5);
+        $pdf->Cell(136, 5, strtoupper($nasabah->nama_lengkap ?? '-'), 0, 0, 'L');
+        $pdf->SetXY(57, 45.2);
+        $pdf->MultiCell(136, 5.8, $alamat, 0, 'L', false, 1, '', '', true, 0, false, true, 11.5, 'T');
+        $pdf->SetXY(57, 57.5);
+        $pdf->Cell(136, 5, $nasabah->no_telp ?? '-', 0, 0, 'L');
 
-            $pdf->Image($kopPath, 5, 5, 200, 0, 'JPG', '', '', false, 100);
+        // Template awal tertulis 80/84; sesuaikan pilihan kedua menjadi 80/85.
+        // $pdf->SetFillColor(255, 255, 255);
+        // $pdf->Rect(99, 62.5, 12, 5.5, 'F');
+        // $pdf->SetFont('times', 'B', 10);
+        // $pdf->SetXY(99, 63.2);
+        // $pdf->Cell(12, 5, '80/85', 0, 0, 'L');
 
-            $pdf->SetFont('helvetica', 'B', 18);
-            $pdf->SetTextColor(0, 0, 0);
-            $pdf->SetXY(60, 16);
-            $pdf->Cell(140, 5, strtoupper($namaPerusahaan), 0, 1, 'C');
+        $tipeBangunan = (float) ($kavling->tipe_bangunan ?? 0);
+        $luasTanah = (float) ($kavling->luas_tanah ?? 0);
+        $typeOptionX = null;
 
-            $pdf->SetFont('helvetica', '', 9);
-            $pdf->SetX(60);
-            $pdf->Cell(140, 4, $alamatPerusahaan, 0, 1, 'C');
-            $pdf->SetX(60);
-            $pdf->Cell(140, 4, 'Telp: ' . ($perusahaan->telp_perusahaan ?? '-'), 0, 1, 'C');
+        if ($tipeBangunan === 45.0 && $luasTanah === 75.0) {
+            $typeOptionX = 59.8;
+        } elseif ($tipeBangunan === 80.0 && $luasTanah === 84.0) {
+            $typeOptionX = 95;
+        }
 
-            // if (file_exists($logoPath)) {
-            //     $pdf->Image($logoPath, 140, 13, 55, 0, '', '', '', false, 150);
-            // }
+        if ($typeOptionX !== null) {
+            $pdf->SetFont('dejavusans', 'B', 18);
+            $pdf->SetXY($typeOptionX, 60);
+            $pdf->Cell(5, 5, '✓', 0, 0, 'C');
+        }
 
+        $pdf->SetFont('times', '', 11);
+        $pdf->SetXY(66, 68.5);
+        $pdf->Cell(75, 5, number_format($hargaJual, 0, ',', '.') . ',-', 0, 0, 'L');
 
-        $lineY1 = 33.5;
-        $pdf->SetLineWidth(0.3);
-        $pdf->SetDrawColor(0, 0, 0);
-        $pdf->Line(9, $lineY1, 200, $lineY1);
+        // $pdf->SetFont('times', 'B', 12);
+        $pdf->SetFont('dejavusans', 'B', 18);
+        $jenisX = 60;
+        if (str_contains($kategoriKwitansi, 'proses')) {
+            $jenisX = 91.3;
+        } elseif (str_contains($kategoriKwitansi, 'dp') || str_contains($kategoriKwitansi, 'uang muka')) {
+            $jenisX = 125.7;
+        } elseif (str_contains($kategoriKwitansi, 'pelunasan') || str_contains($kategoriKwitansi, 'lunas')) {
+            $jenisX = 162.2;
+        }
+        $pdf->SetXY($jenisX, 72.5);
+        $pdf->Cell(5, 5, '✓', 0, 0, 'C');
 
-        $pdf->ln(2);
-        $pdf->SetFont('helvetica', 'BU', 14);
-        $pdf->SetX(15);
-        $pdf->Cell(180, 10, 'KWITANSI', 0, 0, 'C');
+        $pdf->SetFont('times', 'B', 11);
+        $pdf->SetXY(66, 81);
+        $pdf->Cell(77, 5, number_format($pembayaran->nominal, 0, ',', '.') . ',-', 0, 0, 'L');
+        $pdf->SetFont('times', 'I', 9.5);
+        $pdf->SetXY(57, 88.7);
+        $pdf->Cell(136, 5, '# ' . $this->terbilang($pembayaran->nominal) . ' rupiah #', 0, 0, 'L');
 
-        $pdf->ln(3);
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->SetX(15);
-        $pdf->Cell(30, 5, 'No. : ' . ($pembayaran->no_kwitansi ?? '-'), 'B', 1, 'L');
-        $pdf->ln(5);
+        // $pdf->SetFont('times', 'B', 12);
+        $pdf->SetFont('dejavusans', 'B', 18);
+        $metodeX = str_contains($metode, 'transfer') ? 37 : 15.8;
+        $pdf->SetXY($metodeX, 90.6);
+        $pdf->Cell(5, 5, '✓', 0, 0, 'C');
 
-        $pdf->SetFont('helvetica', '', 11);
-        $pdf->SetX(15);
-        $pdf->Cell(48, 6, 'Telah Diterima Dari', 0, 0, 'L');
-        $pdf->Cell(5, 6, ':', 0, 0);
-        $pdf->Cell(127, 6, strtoupper($nasabah->nama_lengkap) ?? '-', 'B', 1);
-
-        $pdf->ln(3);
-        $pdf->SetX(15);
-
-        $pdf->Cell(48, 8, 'Uang Sejumlah', 0, 0);
-        $pdf->Cell(5, 8, ':', 0, 0);
-        $pdf->SetFillColor(219, 153, 47);
-        $pdf->Cell(127, 8, '#'.strtoupper($this->terbilang($pembayaran->nominal)) . ' RUPIAH#', 0, 1, 'L', true);
-        $pdf->SetFillColor(255, 255, 255);
-
-        $pdf->ln(3);
-        $pdf->SetX(15);
-        $pdf->Cell(48, 6, 'Untuk Pembayaran', 0, 0);
-        $pdf->Cell(5, 6, ':', 0, 0);
-        $pdf->Cell(127, 6, $pembayaran->keterangan ?? '-', 'B', 1, 'L');
-
-        $pdf->ln(2);
-        $pdf->SetX(15);
-        $pdf->Cell(180, 6, '', 'B', 1, 'L');
-        // ----------
-
-        $pdf->ln(3);
-        $pdf->SetX(15);
-        $pdf->Cell(180, 5, 'Cara Pembayaran :', 0, 0, 'L');
-        $pdf->SetX(55);
-        $pdf->Cell(50, 5, strtoupper($pembayaran->metode->jenis_bayar ?? 'CASH'), 0, 0, 'L');
-        $tanggal = \Carbon\Carbon::parse($pembayaran->tanggal)->locale('id')->isoFormat('D MMMM YYYY');
-
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->SetX(145);
-        $pdf->Cell(40, 6, 'Jambi, '.$tanggal, 'B', 1,'C');
-
-
-        $pdf->ln(10);
-        $pdf->SetFont('helvetica', 'B', 11);
-        $pdf->SetFillColor(255, 255, 255);
-        $pdf->SetDrawColor(0, 0, 0);
-        $pdf->SetLineWidth(0.3);
-        $pdf->SetX(15);
-        $pdf->Cell(15, 10, 'Rp.', 'TB', 0, 'C', false);
-
-        $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->SetFillColor(219, 153, 47);
-        $pdf->SetX(30);
-        $pdf->Cell(35, 10, ' ' . number_format($pembayaran->nominal, 0, ',', '.') . ',-', 'LTBR', 0, 'L', true);
-        $pdf->SetFillColor(255, 255, 255);
-
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->ln(7);
-        $pdf->SetX(92);
-        $pdf->Cell(35, 6, $perusahaan->nama_mengetahui, 'B', 0, 'C');
-        $pdf->Cell(20, 6, '', 0, 0, 'C');
-        $pdf->Cell(35, 6, $perusahaan->nama_penandatangan, 'B', 1, 'C');
-
-        $pdf->SetX(92);
-        $pdf->Cell(35, 6, 'Direktur', 0, 0, 'C');
-        $pdf->Cell(20, 6, '', 0, 0, 'C');
-        $pdf->Cell(35, 6, 'Admin', 0, 1, 'C');
-
-
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetX(15);
-        $pdf->Cell(45, 4, 'Catatan : ', 0, 1, 'l');
-        $pdf->SetX(15);
-        $pdf->Cell(45, 4, '1. Setelah melakukan pembayaran, segera konfirmasi ke WA 082173603773 : ', 0, 1, 'l');
-        $pdf->SetX(15);
-        $pdf->Cell(45, 4, '2. Butuh informasi bubungi 082173603773 : ', 0, 1, 'l');
+        $pdf->SetFont('times', 'B', 9);
+        $pdf->SetXY(106, 121);
+        $pdf->Cell(41, 5, $perusahaan->nama_mengetahui ?? '-', 0, 0, 'C');
+        $pdf->SetXY(151, 121);
+        $pdf->Cell(41, 5, $perusahaan->nama_penandatangan ?? '-', 0, 0, 'C');
 
         $filename = 'Kwitansi-' . ($pembayaran->no_kwitansi ?? 'draft') . '.pdf';
         $pdf->Output($filename, 'I');
@@ -990,7 +928,7 @@ class PembayaranController extends Controller
 
             return response()->json([
                 'status' => 'error',
-                'message' => 'Gagal mengupdate SBUM.',
+                'message' => 'Gagal mengupdate DP ke Bank.',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -1133,7 +1071,7 @@ class PembayaranController extends Controller
     {
         $rules = [
             'tanggal_pembayaran'    => 'required|date',
-            'id_kategori_transaksi' => 'required',
+            'id_kategori_transaksi' => 'required|in:4,5,6,8',
             'id_bank'               => 'required',
             'id_metode_bayar'       => 'required',
             'id_tagihan'            => 'required_if:id_kategori_transaksi,17',
@@ -1145,6 +1083,7 @@ class PembayaranController extends Controller
         $messages = [
             'tanggal_pembayaran.required'    => 'Tanggal Pembayaran wajib diisi.',
             'id_kategori_transaksi.required' => 'Kategori Transaksi wajib diisi.',
+            'id_kategori_transaksi.in'       => 'Kategori Transaksi tidak valid.',
             'id_bank.required'               => 'Bank wajib dipilih.',
             'id_metode_bayar.required'       => 'Metode Pembayaran wajib dipilih.',
             'id_tagihan.required_if'         => 'Tagihan wajib dipilih.',
@@ -1176,6 +1115,13 @@ class PembayaranController extends Controller
                 );
             }
 
+            $kategoriKwitansi = [
+                4 => 'Booking Fee',
+                6 => 'Biaya Proses',
+                8 => 'DP/Uang Muka',
+                5 => 'Pelunasan',
+            ][(int) $request->id_kategori_transaksi];
+
             $pemasukan = Pemasukan::create([
                 'tanggal'               => $request->tanggal_pembayaran,
                 'id_customer'           => $id,
@@ -1185,7 +1131,7 @@ class PembayaranController extends Controller
                 'no_kwitansi'           => $no_kwitansi,
                 'nominal'               => str_replace('.', '', $request->nominal_bayar),
                 'keterangan'            => $request->keterangan_pembayaran,
-                'keterangan_kategori'   => $request->keterangan_kategori ?? '',
+                'keterangan_kategori'   => $kategoriKwitansi,
                 'id_metode_bayar'       => $request->id_metode_bayar,
                 'lampiran'              => $filename ?? '',
             ]);

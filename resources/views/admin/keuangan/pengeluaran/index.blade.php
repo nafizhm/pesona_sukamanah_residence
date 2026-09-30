@@ -41,7 +41,7 @@
                                             <th>Nominal</th>
                                             <th>Kategori</th>
                                             <th>Rekening</th>
-                                            <th width="100px" class="text-center">Action</th>
+                                            <th width="220px" class="text-center">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -74,6 +74,36 @@
                             <div class="col-sm-3">
                                 <input type="date" class="form-control" id="tanggal" name="tanggal"
                                     value="{{ \Carbon\Carbon::now()->format('Y-m-d') }}">
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label for="no_tanda_terima" class="col-sm-3 col-form-label">Nomor Tanda Terima</label>
+                            <div class="col-sm-3">
+                                <input type="text" class="form-control" id="no_tanda_terima" name="no_tanda_terima"
+                                    placeholder="Contoh: TT-001">
+                            </div>
+                            <label for="id_metode_bayar" class="col-sm-2 col-form-label">Metode Bayar</label>
+                            <div class="col-sm-4">
+                                <select class="form-select select-metode-bayar" name="id_metode_bayar" id="id_metode_bayar">
+                                    <option value=""></option>
+                                    @foreach ($metodeBayarList as $item)
+                                        <option value="{{ $item->id }}">{{ $item->jenis_bayar }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label for="diterima_dari" class="col-sm-3 col-form-label">Telah Diterima Dari / Penyetor</label>
+                            <div class="col-sm-9">
+                                <input type="text" class="form-control" id="diterima_dari" name="diterima_dari"
+                                    placeholder="Nama pemberi atau penyetor">
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label for="nama_penerima" class="col-sm-3 col-form-label">Nama Penerima</label>
+                            <div class="col-sm-9">
+                                <input type="text" class="form-control" id="nama_penerima" name="nama_penerima"
+                                    placeholder="Nama petugas penerima">
                             </div>
                         </div>
                         <div class="form-group row">
@@ -264,6 +294,11 @@
                 theme: "bootstrap4",
                 placeholder: "Pilih Hutang",
             });
+            $('.select-metode-bayar').select2({
+                theme: "bootstrap4",
+                minimumResultsForSearch: Infinity,
+                placeholder: "Pilih Metode Bayar",
+            });
         });
 
         $(document).on('click', '[data-target="#modalForm"]', function() {
@@ -306,7 +341,7 @@
         });
 
         var permissions = @json($permissions);
-        var showActionColumn = (permissions['edit'] == 1 || permissions['hapus'] == 1);
+        var showActionColumn = true;
 
         $(function() {
             var table = $('.data-table').DataTable({
@@ -378,6 +413,10 @@
                     $('#modalFormLabel').text('Edit Pengeluaran');
                     $('#primary_id').val(response.data.id);
                     $('#tanggal').val(response.data.tanggal);
+                    $('#no_tanda_terima').val(response.data.no_tanda_terima);
+                    $('#diterima_dari').val(response.data.diterima_dari);
+                    $('#nama_penerima').val(response.data.nama_penerima);
+                    $('#id_metode_bayar').val(response.data.id_metode_bayar).trigger('change');
                     $('#keterangan').val(response.data.keterangan);
 
                     let nominal = parseFloat(response.data.nominal);
@@ -441,6 +480,7 @@
             $('#formData')[0].reset();
             $('#primary_id').val('');
             $('#id_bank').val('').trigger('change');
+            $('#id_metode_bayar').val('').trigger('change');
             $('#id_kategori_transaksi').val('').trigger('change');
             $('#id_kategori_transaksi').prop('disabled', false);
             $('#id_hutang').val('').trigger('change');

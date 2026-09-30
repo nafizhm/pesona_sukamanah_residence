@@ -29,7 +29,6 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         $permissions = HakAksesController::getUserPermissions();
-        $docTemplates = DocumentTemplate::where('is_active', true)->get(['kode', 'nama']);
 
         Carbon::setLocale('id');
 
@@ -93,7 +92,7 @@ class CustomerController extends Controller
                     $ktp  = $row->nik ? '<span class="badge bg-info">NIK: ' . $row->nik . '</span>' : '';
                     return "$nama<br>$wa<br>$ktp";
                 })
-                ->addColumn('action', function ($row) use ($permissions, $docTemplates): string {
+                ->addColumn('action', function ($row) use ($permissions): string {
                     $editUrl   = route('customer.edit', $row->id);
                     $uploadUrl = route('upload-file.index', ['id_customer' => $row->id]);
                     $btn       = '<div class="text-center">';
@@ -104,15 +103,7 @@ class CustomerController extends Controller
 
                     $btn .= '<a href="' . e($uploadUrl) . '" class="btn btn-info btn-sm">Upload File</a>';
 
-                    $documents = $docTemplates->map(fn($t) => [
-                        'name' => $t->nama,
-                        'route' => route('customer.print-document', [$t->kode, $row->id]),
-                        'checked' => true,
-                    ])->values()->toJson();
-                    $btn .= '<button class="btn btn-dark btn-sm btn-cetak-item ml-1"
-                                    data-id="' . $row->id . '"
-                                    data-nama="' . e($row->nama_lengkap) . '"
-                                    data-documents=\'' . $documents . '\'>Cetak</button>';
+                    $btn .= '<a href="' . e(route('customer.cetak-detail', $row->id)) . '" target="_blank" rel="noopener" class="btn btn-dark btn-sm ml-1">Cetak PDF</a>';
 
                     $btn .= '</div>';
                     return $btn;
@@ -407,7 +398,7 @@ class CustomerController extends Controller
 
             $kavling = KavlingPeta::find($data->id_kavling);
             if ($kavling) {
-                $kavling->status      = 0;
+
                 $kavling->id_customer = 0;
                 $kavling->save();
             }
@@ -429,6 +420,16 @@ class CustomerController extends Controller
                 'error'   => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function cetakDetail($id_customer)
+    {
+        $customer = Customer::with(['marketing', 'lokasi', 'kavling', 'progres'])
+            ->findOrFail($id_customer);
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('admin.customer.customer.pdf', compact('customer'))
+            ->setPaper('a4', 'portrait')
+            ->stream('data-customer-' . $customer->id . '.pdf');
     }
 
     public function cetakData(Request $request)

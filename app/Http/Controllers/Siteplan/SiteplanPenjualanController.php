@@ -22,7 +22,7 @@ class SiteplanPenjualanController extends Controller
     {
          $lokasiKavling = LokasiKavling::with([
         'masterSvg',
-        'kavlingPeta.customer.progres'  // ← tambahkan ini
+        'kavlingPeta' => fn ($query) => $query->withBookingState(), 'kavlingPeta.customer.progres'  // ← tambahkan ini
     ])->orderBy('urutan', 'asc')->get();
 
         $legend = ProgresListPenjualan::whereNotNull('warna')
@@ -46,10 +46,11 @@ class SiteplanPenjualanController extends Controller
 
     public function show($id)
     {
-        $data = KavlingPeta::with(['lokasi', 'customer', 'listrikAir'])->findOrFail($id);
+        $data = KavlingPeta::withBookingState()->with(['lokasi', 'customer.marketing', 'customer.progres', 'listrikAir'])->findOrFail($id);
 
-        $tagihanList   = Piutang::where('id_customer', $data->id_customer)->orderBy('id')->get();
-        $pemasukanList = Pemasukan::with('kategori')->where('id_customer', $data->id_customer)->get();
+        $customerId = $data->customer?->id;
+        $tagihanList = $customerId ? Piutang::where('id_customer', $customerId)->orderBy('id')->get() : collect();
+        $pemasukanList = $customerId ? Pemasukan::with('kategori')->where('id_customer', $customerId)->get() : collect();
 
         return response()->json([
             'success'         => true,
@@ -64,7 +65,7 @@ class SiteplanPenjualanController extends Controller
 
     private function generateSVG($id_lokasi, $width = '100%', $height = '100%')
     {
-        $lokasi = LokasiKavling::with(['masterSvg', 'kavlingPeta.customer.progres'])
+        $lokasi = LokasiKavling::with(['masterSvg', 'kavlingPeta' => fn ($query) => $query->withBookingState(), 'kavlingPeta.customer.progres'])
             ->findOrFail($id_lokasi);
 
         if (! $lokasi->masterSvg) {
@@ -80,7 +81,7 @@ class SiteplanPenjualanController extends Controller
 
             if ($pt->customer) {
                 $warna = $pt->customer->progres->warna ?? '#ffffff';
-            } elseif ($pt->status == 1) {
+            } elseif ($pt->is_booked) {
                 $warna = '#42f202';
             }
 
@@ -214,11 +215,14 @@ class SiteplanPenjualanController extends Controller
     {
          $request->validate([
         'kode_kavling' => 'required',
+        'id_kavling'   => 'nullable|integer|exists:kavling_peta,id',
         'no_ktp'       => 'nullable',
         ]);
 
-        $kavling = KavlingPeta::with(['lokasi', 'listrikAir', 'customer.marketing'])
-            ->where('kode_kavling', $request->kode_kavling)
+        $kavling = KavlingPeta::withBookingState()->with(['lokasi', 'listrikAir', 'customer.marketing'])
+            ->when($request->filled('id_kavling'),
+                fn ($query) => $query->whereKey($request->id_kavling),
+                fn ($query) => $query->where('kode_kavling', $request->kode_kavling))
             ->first();
 
         if (!$kavling) {
@@ -232,7 +236,7 @@ class SiteplanPenjualanController extends Controller
         $namaLokasi = $kavling->lokasi->nama_kavling ?? '-';
 
         $kavlingData = [
-            'status'        => $kavling->status ?? 'Terjual',
+            'status'        => $kavling->sales_status,
             'marketing'     => optional($cust?->marketing)->nama_marketing ?? '-',
             'lokasi'        => $namaLokasi,
             'blok'          => $kavling->blok ?? $kavling->kode_kavling ?? '-',
@@ -269,7 +273,7 @@ class SiteplanPenjualanController extends Controller
             'luas_tanah'    => $request->luas_tanah ?? '-',
             'luas_bangunan' => $request->luas_bangunan ?? '-',
             'daya_listrik'  => $request->daya_listrik ?? '-',
-            'harga'         => $request->harga ? (int) $request->harga : 0,
+            'harga'         => $kavling->total_harga,
             'no_sertifikat' => $request->no_sertifikat ?? '-',
             'foto'          => null,
         ];
@@ -334,7 +338,10 @@ class SiteplanPenjualanController extends Controller
         $this->rowData($pdf, 'Luas Tanah', $kavlingData['luas_tanah']);
         $this->rowData($pdf, 'Luas / Tipe Bangunan', $kavlingData['luas_bangunan']);
         $this->rowData($pdf, 'Daya Listrik', $listrikAirData['daya_listrik']);
-        $this->rowData($pdf, 'Harga Jual', 'Rp ' . number_format($kavlingData['harga'], 0, ',', '.'));
+        foreach ($kavling->rincian_biaya ?? [] as $biaya) {
+            $this->rowData($pdf, $biaya['nama'] ?? '-', 'Rp ' . number_format((float) ($biaya['nilai'] ?? 0), 0, ',', '.'));
+        }
+        $this->rowData($pdf, 'Total Harga', 'Rp ' . number_format($kavlingData['harga'], 0, ',', '.'));
         $pdf->Ln(2);
 
         $pdf->SetFont('times', 'BU', 12);

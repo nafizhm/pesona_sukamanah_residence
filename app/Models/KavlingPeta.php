@@ -37,7 +37,6 @@ class KavlingPeta extends Model
         'jenis_map',
         'map',
         'matrik',
-        'status',
         'keterangan',
         'atas_nama_surat',
         'id_customer',
@@ -59,7 +58,39 @@ class KavlingPeta extends Model
     }
     public function customer()
     {
-        return $this->hasOne(Customer::class, 'id_kavling', 'id');
+        return $this->hasOne(Customer::class, 'id_kavling', 'id')
+            ->where(fn ($query) => $query->where('stt_arsip', 0)->orWhereNull('stt_arsip'));
+    }
+
+    public function activeBookings()
+    {
+        return $this->hasMany(PengajuanHold::class, 'id_kavling')->where('stt_reg', 1);
+    }
+
+    public function scopeAvailable($query, $exceptBookingId = null)
+    {
+        return $query->whereDoesntHave('customer')->whereDoesntHave('activeBookings', function ($booking) use ($exceptBookingId) {
+            if ($exceptBookingId !== null) {
+                $booking->where('pengajuan_hold.id', '!=', $exceptBookingId);
+            }
+        });
+    }
+
+    public function scopeWithBookingState($query)
+    {
+        return $query->withExists(['activeBookings as is_booked']);
+    }
+
+    public function getIsBookedAttribute($value): bool
+    {
+        return $value !== null ? (bool) $value : $this->activeBookings()->exists();
+    }
+
+    public function getSalesStatusAttribute(): string
+    {
+        return $this->customer
+            ? ($this->customer->progres->status_progres ?? 'Terjual')
+            : ($this->is_booked ? 'Booking' : 'Tersedia');
     }
     public function progres()
     {

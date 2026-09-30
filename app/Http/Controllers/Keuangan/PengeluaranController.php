@@ -6,11 +6,13 @@ use App\Http\Controllers\Pengaturan\HakAksesController;
 use App\Models\Bank;
 use App\Models\Hutang;
 use App\Models\KategoriTransaksi;
+use App\Models\MetodeBayar;
 use App\Models\Pengeluaran;
 use App\Traits\LogAktivitasTrait;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use setasign\Fpdi\Tcpdf\Fpdi;
 use Yajra\DataTables\Facades\DataTables;
 
 class PengeluaranController extends Controller
@@ -76,12 +78,16 @@ class PengeluaranController extends Controller
                     $editUrl   = route('pengeluaran.edit', $row->id);
                     $detailUrl = route('pengeluaran.show', $row->id);
                     $deleteUrl = route('pengeluaran.destroy', $row->id);
+                    $cetakUrl  = route('pengeluaran.cetak', $row->id);
 
                     $isDetailOnly =
                     $row->id_po != 0 ||
                     $row->id_mutasi != 0;
 
                     $btn = '<div class="d-flex justify-content-center">';
+                    $btn .= '<a href="' . e($cetakUrl) . '" target="_blank" class="btn btn-success btn-sm mx-1" title="Cetak Tanda Terima">
+                        <i class="fas fa-print"></i> Cetak
+                    </a>';
 
                     if ($isDetailOnly) {
                         $btn .= '<button class="btn btn-primary btn-sm mx-1 detail-button"
@@ -132,8 +138,9 @@ class PengeluaranController extends Controller
         $HutangList = Hutang::where('status', 1)->get();
 
         $bankList = Bank::all();
+        $metodeBayarList = MetodeBayar::whereIn('id', [1, 2])->get();
 
-        return view('admin.keuangan.pengeluaran.index', compact('permissions', 'kategoriTransaksi', 'kategoriTransaksiDetail', 'HutangList', 'bankList'));
+        return view('admin.keuangan.pengeluaran.index', compact('permissions', 'kategoriTransaksi', 'kategoriTransaksiDetail', 'HutangList', 'bankList', 'metodeBayarList'));
     }
 
     public function edit($id)
@@ -160,16 +167,25 @@ class PengeluaranController extends Controller
     {
         $request->validate([
             'tanggal'               => 'required|date',
+            'no_tanda_terima'       => 'required|max:100|unique:pengeluaran,no_tanda_terima',
+            'diterima_dari'         => 'required|max:255',
+            'nama_penerima'         => 'required|max:255',
             'nominal'               => 'required',
             'id_bank'               => 'required',
+            'id_metode_bayar'       => 'required',
             'lampiran'              => 'required|file|mimes:jpg,jpeg,png,pdf|max:2048',
             'id_kategori_transaksi' => 'required',
             'id_hutang'             => 'required_if:id_kategori_transaksi,3',
         ], [
             'tanggal.required'               => 'Tanggal wajib diisi.',
             'tanggal.date'                   => 'Tanggal harus berupa tanggal.',
+            'no_tanda_terima.required'       => 'Nomor tanda terima wajib diisi.',
+            'no_tanda_terima.unique'         => 'Nomor tanda terima sudah digunakan.',
+            'diterima_dari.required'         => 'Nama pemberi/penyetor wajib diisi.',
+            'nama_penerima.required'         => 'Nama penerima wajib diisi.',
             'nominal.required'               => 'Nominal wajib diisi.',
             'id_bank.required'               => 'Rekening wajib diisi.',
+            'id_metode_bayar.required'       => 'Metode pembayaran wajib dipilih.',
             'lampiran.required'              => 'Lampiran wajib diisi.',
             'lampiran.file'                  => 'Lampiran harus berupa file.',
             'lampiran.mimes'                 => 'Format lampiran harus jpg, jpeg, png, atau pdf.',
@@ -199,8 +215,12 @@ class PengeluaranController extends Controller
             'id_mutasi'             => 0,
             'id_bank'               => $request->id_bank,
             'tanggal'               => $request->tanggal,
+            'no_tanda_terima'       => $request->no_tanda_terima,
+            'diterima_dari'         => $request->diterima_dari,
+            'nama_penerima'         => $request->nama_penerima,
             'nominal'               => str_replace('.', '', $request->nominal),
             'id_kategori_transaksi' => $request->id_kategori_transaksi,
+            'id_metode_bayar'       => $request->id_metode_bayar,
             'keterangan'            => $request->keterangan ?? '',
         ];
 
@@ -248,8 +268,12 @@ class PengeluaranController extends Controller
 
         $rules = [
             'tanggal' => 'required|date',
+            'no_tanda_terima' => 'required|max:100|unique:pengeluaran,no_tanda_terima,' . $id,
+            'diterima_dari' => 'required|max:255',
+            'nama_penerima' => 'required|max:255',
             'nominal' => 'required',
             'id_bank' => 'required',
+            'id_metode_bayar' => 'required',
         ];
 
         if ($request->id_kategori_transaksi == 5) {
@@ -265,8 +289,13 @@ class PengeluaranController extends Controller
         $request->validate($rules, [
             'tanggal.required'               => 'Tanggal wajib diisi.',
             'tanggal.date'                   => 'Tanggal harus berupa tanggal.',
+            'no_tanda_terima.required'       => 'Nomor tanda terima wajib diisi.',
+            'no_tanda_terima.unique'         => 'Nomor tanda terima sudah digunakan.',
+            'diterima_dari.required'         => 'Nama pemberi/penyetor wajib diisi.',
+            'nama_penerima.required'         => 'Nama penerima wajib diisi.',
             'nominal.required'               => 'Nominal wajib diisi.',
             'id_bank.required'               => 'Rekening wajib diisi.',
+            'id_metode_bayar.required'       => 'Metode pembayaran wajib dipilih.',
             'lampiran.required'              => 'Lampiran wajib diisi.',
             'lampiran.file'                  => 'Lampiran harus berupa file.',
             'lampiran.mimes'                 => 'Format lampiran harus jpg, jpeg, png, atau pdf.',
@@ -276,7 +305,11 @@ class PengeluaranController extends Controller
 
         $db = [
             'tanggal'    => $request->tanggal,
+            'no_tanda_terima' => $request->no_tanda_terima,
+            'diterima_dari' => $request->diterima_dari,
+            'nama_penerima' => $request->nama_penerima,
             'id_bank'    => $request->id_bank,
+            'id_metode_bayar' => $request->id_metode_bayar,
             'keterangan' => $request->keterangan ?? '',
             'nominal'    => str_replace('.', '', $request->nominal),
         ];
@@ -356,6 +389,107 @@ class PengeluaranController extends Controller
         $this->logEdit('Pengeluaran', $data->id);
 
         return response()->json(['status' => 'success']);
+    }
+
+    public function cetak($id)
+    {
+        $pengeluaran = Pengeluaran::findOrFail($id);
+        $metode = MetodeBayar::find($pengeluaran->id_metode_bayar);
+        $templatePath = public_path('templates/tanda-terima-pengeluaran-template.pdf');
+
+        abort_unless(file_exists($templatePath), 500, 'Template tanda terima pengeluaran tidak ditemukan.');
+
+        $pdf = new Fpdi('P', 'mm', 'A4', true, 'UTF-8', false);
+        $pdf->SetTitle('Tanda Terima - ' . ($pengeluaran->no_tanda_terima ?: $pengeluaran->id));
+        $pdf->SetAuthor('Dealaska');
+        $pdf->SetMargins(0, 0, 0);
+        $pdf->SetAutoPageBreak(false, 0);
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->setSourceFile($templatePath);
+        $templateId = $pdf->importPage(1);
+        $pdf->AddPage('P', 'A4');
+        $pdf->useTemplate($templateId, 0, 0, 210, 297);
+
+        $nomor = $pengeluaran->no_tanda_terima ?: 'TT-' . str_pad((string) $pengeluaran->id, 6, '0', STR_PAD_LEFT);
+        $tanggal = Carbon::parse($pengeluaran->tanggal)->translatedFormat('d F Y');
+        $metodeNama = strtolower($metode->jenis_bayar ?? 'tunai');
+
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->SetFont('times', 'B', 10);
+        $pdf->SetXY(164, 22.2);
+        $pdf->Cell(29, 5, $nomor, 0, 0, 'L');
+        $pdf->SetXY(164, 27.2);
+        $pdf->Cell(29, 5, $tanggal, 0, 0, 'L');
+
+        $pdf->SetFont('times', '', 10);
+        $pdf->SetXY(56, 40.8);
+        $pdf->Cell(137, 5, $pengeluaran->diterima_dari ?: '-', 0, 0, 'L');
+        $pdf->SetFont('times', 'I', 9.5);
+        $pdf->SetXY(56, 47);
+        $pdf->Cell(137, 5, '# ' . $this->terbilang((int) $pengeluaran->nominal) . ' rupiah #', 0, 0, 'L');
+        $pdf->SetFont('times', '', 10);
+        $pdf->SetXY(56, 53.2);
+        $pdf->MultiCell(137, 5, $pengeluaran->keterangan ?: '-', 0, 'L', false, 1, '', '', true, 0, false, true, 10, 'T');
+
+        $pdf->SetFont('times', 'B', 12);
+        $pdf->SetXY(25, 62.8);
+        $pdf->Cell(68, 6, number_format((int) $pengeluaran->nominal, 0, ',', '.') . ',-', 0, 0, 'L');
+
+        $metodeX = str_contains($metodeNama, 'transfer')
+            ? 37
+            : (str_contains($metodeNama, 'cash') || str_contains($metodeNama, 'tunai') ? 15.3 : null);
+        if ($metodeX !== null) {
+            $pdf->SetFont('dejavusans', 'B', 13);
+            $pdf->SetXY($metodeX, 73.5);
+            $pdf->Cell(5, 5, '✓', 0, 0, 'C');
+        }
+
+        $pdf->SetFont('times', 'B', 9);
+        $pdf->SetXY(133, 87.5);
+        $pdf->Cell(30, 5, $pengeluaran->diterima_dari ?: '-', 0, 0, 'C');
+        $pdf->SetXY(163, 87.5);
+        $pdf->Cell(30, 5, $pengeluaran->nama_penerima ?: '-', 0, 0, 'C');
+
+        $filename = 'Tanda-Terima-' . preg_replace('/[^A-Za-z0-9_-]/', '-', $nomor) . '.pdf';
+        $pdf->Output($filename, 'I');
+        exit;
+    }
+
+    private function terbilang(int $angka): string
+    {
+        $angka = abs($angka);
+        $baca = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
+
+        if ($angka < 12) {
+            return trim($baca[$angka]);
+        }
+        if ($angka < 20) {
+            return $this->terbilang($angka - 10) . ' Belas';
+        }
+        if ($angka < 100) {
+            return trim($this->terbilang(intdiv($angka, 10)) . ' Puluh ' . $this->terbilang($angka % 10));
+        }
+        if ($angka < 200) {
+            return trim('Seratus ' . $this->terbilang($angka - 100));
+        }
+        if ($angka < 1000) {
+            return trim($this->terbilang(intdiv($angka, 100)) . ' Ratus ' . $this->terbilang($angka % 100));
+        }
+        if ($angka < 2000) {
+            return trim('Seribu ' . $this->terbilang($angka - 1000));
+        }
+        if ($angka < 1000000) {
+            return trim($this->terbilang(intdiv($angka, 1000)) . ' Ribu ' . $this->terbilang($angka % 1000));
+        }
+        if ($angka < 1000000000) {
+            return trim($this->terbilang(intdiv($angka, 1000000)) . ' Juta ' . $this->terbilang($angka % 1000000));
+        }
+        if ($angka < 1000000000000) {
+            return trim($this->terbilang(intdiv($angka, 1000000000)) . ' Miliar ' . $this->terbilang($angka % 1000000000));
+        }
+
+        return trim($this->terbilang(intdiv($angka, 1000000000000)) . ' Triliun ' . $this->terbilang($angka % 1000000000000));
     }
 
     public function destroy($id)

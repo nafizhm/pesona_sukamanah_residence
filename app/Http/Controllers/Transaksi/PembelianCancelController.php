@@ -39,7 +39,7 @@ class PembelianCancelController extends Controller
                     if ($permissions['hapus']) {
                         $kavling = $row->customer?->kavling;
 
-                        if ($kavling && $kavling->id_customer != null && $kavling->status != 0) {
+                        if ($kavling && ($kavling->customer || $kavling->is_booked)) {
                             return '
             <button type="button"
                 class="btn btn-danger btn-sm"
@@ -145,7 +145,6 @@ class PembelianCancelController extends Controller
                 'keterangan'            => 'Pembatalan Pembelian Unit ' . $customer->lokasi->nama_kavling . ' - ' . $customer->kavling->kode_kavling . ' atas nama ' . $customer->nama_lengkap,
             ]);
 
-            $customer->kavling->status      = 0;
             $customer->kavling->id_customer = null;
             $customer->kavling->save();
 
@@ -189,7 +188,7 @@ class PembelianCancelController extends Controller
             }
 
             if ($kavling && $customer) {
-                $kavling->status      = 2;
+
                 $kavling->id_customer = $customer->id;
                 $kavling->save();
 

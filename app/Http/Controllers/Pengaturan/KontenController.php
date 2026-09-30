@@ -460,7 +460,7 @@ class KontenController extends Controller
 
         $kav = LokasiKavling::findOrFail($id);
         $kav->masterSvg = MasterSVG::where('id_lokasi', $kav->id)->first();
-        $kav->kavlingPeta = KavlingPeta::where('id_lokasi', $kav->id)->get();
+        $kav->kavlingPeta = KavlingPeta::withBookingState()->with('customer.progres')->where('id_lokasi', $kav->id)->get();
 
         foreach ($kav->kavlingPeta as $pt) {
             $pt->customer = Customer::where('id_kavling', $pt->id)->first();

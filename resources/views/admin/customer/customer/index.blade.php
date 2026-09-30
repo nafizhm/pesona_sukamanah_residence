@@ -374,7 +374,6 @@
         </div>
     </div>
 
-    @include('admin.partials.modal_cetak')
 @endsection
 
 @push('scripts')
@@ -849,6 +848,5 @@
             });
         });
     </script>
-    @include('admin.partials.js-cetak')
 @endpush
 
