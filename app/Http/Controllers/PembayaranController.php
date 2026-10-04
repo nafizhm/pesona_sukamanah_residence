@@ -240,7 +240,7 @@ class PembayaranController extends Controller
 
         $totalTagihan = $customer->piutangs->sum('nominal');
         $jumlahBayar  = $customer->pemasukans->sum('nominal');
-        $sisaRingkas  = max($totalTagihan - ($customer->estimasi_plafon ?? 0) - ($customer->sbum ?? 0) - $jumlahBayar, 0);
+        $sisaRingkas  = max($totalTagihan - $jumlahBayar, 0);
 
         $pdf->SetX(90);
         $pdf->Cell(25, 6, 'Harga Rumah', 0, 0);
@@ -303,7 +303,7 @@ class PembayaranController extends Controller
 
         $pdf->SetFont('Times', '', 9);
         $no   = 1;
-        $sisa = $totalTagihan - ($customer->estimasi_plafon ?? 0) - ($customer->sbum ?? 0);
+        $sisa = $totalTagihan;
 
         foreach ($customer->pemasukans->sortBy('id') as $byr) {
 
@@ -708,7 +708,12 @@ class PembayaranController extends Controller
             $defaultNoKwitansi = '';
         }
 
+        $jumlahBayar = $this->getJumlahBayarCustomer($id);
+        $sisaBayar = $this->getSisaBayarCustomer($id);
+
         return view('admin.pembayaran.detail', compact(
+            'jumlahBayar',
+            'sisaBayar',
             'customer',
             'metodeBayar',
             'bankList',
@@ -729,17 +734,15 @@ class PembayaranController extends Controller
     {
         return Pemasukan::where('id_customer', $customerId)
             ->where('keterangan', 'NOT LIKE', 'Biaya ganti nama%')
-            ->where('id_kategori_transaksi', '!=', 4)
             ->sum('nominal');
     }
 
     private function getSisaBayarCustomer($customerId)
     {
-        $customer = Customer::findOrFail($customerId);
         $totalTagihan = $this->getTotalTagihanCustomer($customerId);
         $jumlahBayar = $this->getJumlahBayarCustomer($customerId);
 
-        return max($totalTagihan - ($customer->estimasi_plafon ?? 0) - ($customer->sbum ?? 0) - $jumlahBayar, 0);
+        return max($totalTagihan - $jumlahBayar, 0);
     }
 
     public function detailTagihan(Request $request, $id)
@@ -806,7 +809,7 @@ class PembayaranController extends Controller
             ]);
 
             $totalTagihan = Piutang::where('id_customer', $id)->sum('nominal');
-            $sisaBayar    = Piutang::where('id_customer', $id)->sum('sisa_bayar');
+            $sisaBayar    = $this->getSisaBayarCustomer($id);
 
             $this->logCreate('Detail Pembayaran', $piutang->id);
 
@@ -849,7 +852,7 @@ class PembayaranController extends Controller
             ]);
 
             $totalTagihan = Piutang::where('id_customer', $id)->sum('nominal');
-            $sisaBayar    = Piutang::where('id_customer', $id)->sum('sisa_bayar');
+            $sisaBayar    = $this->getSisaBayarCustomer($id);
 
             DB::commit();
             return response()->json([
@@ -880,7 +883,7 @@ class PembayaranController extends Controller
 
             $totalTagihan = $this->getTotalTagihanCustomer($id);
             $jumlahBayar  = $this->getJumlahBayarCustomer($id);
-            $sisaBayar    = max($totalTagihan - $estimasiPlafon - ($customer->sbum ?? 0) - $jumlahBayar, 0);
+            $sisaBayar    = max($totalTagihan - $jumlahBayar, 0);
 
             return response()->json([
                 'status'                    => 'success',
@@ -914,7 +917,7 @@ class PembayaranController extends Controller
 
             $totalTagihan = $this->getTotalTagihanCustomer($id);
             $jumlahBayar  = $this->getJumlahBayarCustomer($id);
-            $sisaBayar    = max($totalTagihan - ($customer->estimasi_plafon ?? 0) - $sbum - $jumlahBayar, 0);
+            $sisaBayar    = max($totalTagihan - $jumlahBayar, 0);
 
             return response()->json([
                 'status'                  => 'success',
@@ -945,10 +948,8 @@ class PembayaranController extends Controller
             ->delete();
 
         $totalTagihan = Piutang::where('id_customer', $id_customer)->sum('nominal');
-        $jumlahBayar  = Pemasukan::where('id_customer', $id_customer)
-            ->where('keterangan', 'NOT LIKE', 'Biaya ganti nama%')
-            ->sum('nominal');
-        $sisaBayar    = $totalTagihan - $jumlahBayar;
+        $jumlahBayar  = $this->getJumlahBayarCustomer($id_customer);
+        $sisaBayar    = $this->getSisaBayarCustomer($id_customer);
 
         return response()->json([
             'status'                  => 'success',
@@ -997,7 +998,7 @@ class PembayaranController extends Controller
             }
 
             $totalTagihan = Piutang::where('id_customer', $id_customer)->sum('nominal');
-            $sisaBayar    = Piutang::where('id_customer', $id_customer)->sum('sisa_bayar');
+            $sisaBayar    = $this->getSisaBayarCustomer($id_customer);
 
             DB::commit();
             return response()->json([
@@ -1062,6 +1063,8 @@ class PembayaranController extends Controller
                 ->addColumn('jumlah', fn($item) => $item->jumlah_formatted)
                 ->addColumn('action', fn($item) => $item->action)
                 ->with('total_pemasukan_formatted', number_format($total, 0, ',', '.'))
+                ->with('jumlah_bayar', number_format($this->getJumlahBayarCustomer($id), 0, ',', '.'))
+                ->with('sisa_bayar', number_format($this->getSisaBayarCustomer($id), 0, ',', '.'))
                 ->rawColumns(['action', 'jumlah', 'tanggal'])
                 ->make(true);
         }
@@ -1262,7 +1265,7 @@ class PembayaranController extends Controller
                 'id_customer' => $id,
                 'id_bank' => 0,
                 'id_piutang' => 0,
-                'id_kategori_transaksi' => 4,
+                'id_kategori_transaksi' => KategoriTransaksi::where('kategori', 'Pencairan KPR')->firstOrFail()->id,
                 'no_kwitansi' => '',
                 'nominal' => $jumlahPencairan,
                 'keterangan' => 'Pencairan KPR',

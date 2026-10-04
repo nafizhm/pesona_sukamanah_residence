@@ -118,7 +118,7 @@
                                             <span class="input-group-text">Rp.</span>
                                         </div>
                                         <input class="form-control text-right" type="text" id="jumlah_bayar_all"
-                                            value="{{ number_format($customer->pemasukans->sum('nominal'), 0, ',', '.') }}"
+                                            value="{{ number_format($jumlahBayar, 0, ',', '.') }}"
                                             readonly>
                                     </div>
                                 </div>
@@ -132,7 +132,7 @@
                                             <span class="input-group-text">Rp.</span>
                                         </div>
                                         <input class="form-control text-right" type="text" id="sisa_bayar_all"
-                                            value="{{ number_format(max($customer->piutangs->sum('nominal') - ($customer->estimasi_plafon ?? 0) - ($customer->sbum ?? 0) - $customer->pemasukans->sum('nominal'), 0), 0, ',', '.') }}"
+                                            value="{{ number_format($sisaBayar, 0, ',', '.') }}"
                                             readonly>
                                     </div>
                                 </div>
@@ -660,10 +660,8 @@
 
         function recalcSisaBayar() {
             let totalTagihan = unformatNumber($('#total_tagihan_all').val());
-            let estimasiPlafon = unformatNumber($('#estimasi_plafon').val());
-            let sbum = unformatNumber($('#sbum').val());
             let jumlahBayar = unformatNumber($('#jumlah_bayar_all').val());
-            let sisa = Math.max(totalTagihan - estimasiPlafon - sbum - jumlahBayar, 0);
+            let sisa = Math.max(totalTagihan - jumlahBayar, 0);
             $('#sisa_bayar_all').val(formatNumber(sisa));
         }
 
@@ -1252,6 +1250,8 @@
                 drawCallback: function(settings) {
                     $('#total-pemasukan').html('<b>Rp. ' + settings.json.total_pemasukan_formatted +
                         '</b>');
+                    $('#jumlah_bayar_all').val(settings.json.jumlah_bayar);
+                    $('#sisa_bayar_all').val(settings.json.sisa_bayar);
                 }
             });
         });
