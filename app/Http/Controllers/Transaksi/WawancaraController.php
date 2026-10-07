@@ -267,12 +267,13 @@ class WawancaraController extends Controller
             'lampiran.max'             => 'Ukuran lampiran maksimal 2 MB.',
         ]);
 
+        $wawancara = Wawancara::with('customer')->findOrFail($id);
+        $dp = app(\App\Services\Sp3kDpService::class)->calculate($request);
         DB::beginTransaction();
         try {
             $tglTerbit  = Carbon::parse($request->tgl_terbit_sp3k);
             $tglExpired = $tglTerbit->copy()->addDays(90);
 
-            $wawancara = Wawancara::with('customer')->findOrFail($id);
 
             if ($request->hasFile('lampiran')) {
 
@@ -284,6 +285,7 @@ class WawancaraController extends Controller
             }
 
             WawancaraSp3k::create([
+                ...$dp,
                 'id_wawancara'    => $id,
                 'id_bank_kpr'     => $wawancara->id_bank_kpr,
                 'acc_plafon'      => str_replace('.', '', $request->acc_plafon),

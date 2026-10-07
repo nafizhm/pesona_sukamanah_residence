@@ -27,6 +27,27 @@
                                 </div>
                             </div>
                             <div class="card-body">
+                                <div class="row mb-2">
+                                    <div class="col-md-4 mb-3">
+                                        <div class="border rounded p-3 h-100">
+                                            <div class="text-muted small mb-2">Total Piutang</div>
+                                            <div class="h4 font-weight-bold mb-0" id="summary-piutang">Rp 0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <div class="border rounded p-3 h-100">
+                                            <div class="text-muted small mb-2">Terbayar</div>
+                                            <div class="h4 font-weight-bold text-success mb-0" id="summary-terbayar">Rp 0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <div class="border rounded p-3 h-100">
+                                            <div class="text-muted small mb-2">Sisa Bayar</div>
+                                            <div class="h4 font-weight-bold text-danger mb-0" id="summary-sisa">Rp 0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="text-muted small">Ringkasan seluruh piutang yang sesuai filter tanggal dan pencarian.</p>
                                 <div class="row mb-3">
                                     <div class="col-lg-2 ms-1">
                                         <fieldset class="form-group">
@@ -42,6 +63,8 @@
                                             <th>Tanggal Piutang</th>
                                             <th width="250px">Deskripsi</th>
                                             <th>Nominal</th>
+                                            <th>Terbayar</th>
+                                            <th>Sisa Bayar</th>
                                             <th>Status</th>
                                             <th>Tanggal Pelunasan</th>
                                             <th width="100px" class="text-center">Action</th>
@@ -170,100 +193,68 @@
     </div>
 
     <div class="modal fade" id="modalDetail" tabindex="-1" role="dialog" data-focus="false"
-        aria-labelledby="modalDetailLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
-        <div class="modal-dialog modal-lg" role="document">
+        aria-labelledby="modalDetailLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
             <div class="modal-content">
                 <div class="modal-header bg-indigo">
-                    <h5 class="modal-title text-white font-weight-bold" id="modalDetailLabel"></h5>
-                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <div>
+                        <h5 class="modal-title text-white font-weight-bold" id="modalDetailLabel"></h5>
+                        <div id="identitas-piutang-detail" class="small mt-1"></div>
+                    </div>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Tutup">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <div class="modal-body">
-                    <div class="form-group row">
-                        <label for="tanggal" class="col-sm-3 col-form-label">Tanggal Piutang</label>
-                        <div class="col-sm-5">
-                            <input type="date" class="form-control" id="tanggal_piutang_detail"
-                                name="tanggal_piutang" readonly>
+                <div class="modal-body p-3 p-md-4">
+                    <div class="row" id="info-pembayaran-detail">
+                        <div class="col-md-4 mb-3">
+                            <div class="piutang-summary h-100">
+                                <label for="nominal_detail">Total Piutang</label>
+                                <div class="d-flex align-items-center"><span class="mr-2">Rp</span><input id="nominal_detail" class="piutang-amount" readonly></div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="form-group row">
-                        <label for="id_bank" class="col-sm-3 col-form-label">Rekening</label>
-                        <div class="col-sm-3">
-                            <select class="form-select select-bank" name="id_bank" id="id_bank_detail" readonly>
-                                <option value=""></option>
-                                @foreach ($bankList as $item)
-                                    <option value="{{ $item->id }}">{{ $item->nama }}</option>
-                                @endforeach
-                            </select>
+                        <div class="col-md-4 mb-3">
+                            <div class="piutang-summary h-100 text-success">
+                                <label for="terbayar_detail">Terbayar</label>
+                                <div class="d-flex align-items-center"><span class="mr-2">Rp</span><input id="terbayar_detail" class="piutang-amount" readonly></div>
+                            </div>
                         </div>
-                        <label for="nominal" class="col-sm-2 col-form-label">Nominal</label>
-                        <div class="col-sm-4">
-                            <div class="input-group">
-                                <div class="input-group-prepend">
-                                    <span class="input-group-text">Rp.</span>
-                                </div>
-                                <input name="nominal" id="nominal_detail" class="form-control format-number"
-                                    type="text" readonly>
+                        <div class="col-md-4 mb-3">
+                            <div class="piutang-summary h-100 text-danger">
+                                <label for="sisa_bayar_detail">Sisa Bayar</label>
+                                <div class="d-flex align-items-center"><span class="mr-2">Rp</span><input id="sisa_bayar_detail" class="piutang-amount" readonly></div>
                             </div>
                         </div>
                     </div>
-                    <div class="form-group row">
-                        <label class="col-sm-3 col-form-label">Lampiran</label>
-                        <div class="col-sm-4">
-                            <input type="file" class="mb-2" id="lampiran_detail" name="lampiran_detail"
-                                accept=".jpg, .jpeg, .png">
-                            <div class="img-thumbnail mb-2 d-flex align-items-center justify-content-center"
-                                id="previewLampiranDetail"
-                                style="max-width: 150px; height: 150px; background-color: #f8f9fa; border: 1px solid #dee2e6; overflow: hidden;">
-                                <span style="color: #6c757d;">Tidak ada berkas</span>
+                    <div class="row mb-4">
+                        <div class="col-md-8">
+                            <h6 class="font-weight-bold mb-3">Informasi Piutang</h6>
+                            <div class="row">
+                                <div class="form-group col-sm-6"><label for="tanggal_piutang_detail">Tanggal Piutang</label><input type="text" class="form-control" id="tanggal_piutang_detail" readonly></div>
+                                <div class="form-group col-sm-6"><label for="id_bank_detail">Rekening</label><input class="form-control" id="id_bank_detail" readonly></div>
+                            </div>
+                            <div class="form-group mb-md-0"><label for="deskripsi_detail">Deskripsi</label><textarea class="form-control" id="deskripsi_detail" rows="3" readonly></textarea></div>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="font-weight-bold mb-3">Lampiran Piutang</h6>
+                            <div id="previewLampiranDetail" class="piutang-attachment d-flex align-items-center justify-content-center">
+                                <span class="text-muted small">Tidak ada berkas</span>
                             </div>
                         </div>
                     </div>
-
-                    <div class="form-group row">
-                        <label for="deskripsi" class="col-sm-3 col-form-label">Deskripsi</label>
-                        <div class="col-sm-8">
-                            <textarea class="form-control" id="deskripsi_detail" name="deskripsi" rows="3" readonly></textarea>
-                        </div>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
+                        <h6 class="font-weight-bold mb-1">Riwayat Pembayaran</h6>
+                        <span class="text-muted small">Alokasi pembayaran untuk piutang ini</span>
                     </div>
-
-                    <div id="info-pembayaran-detail" style="display: none;">
-                        <!-- Sisa Bayar -->
-                        <div class="form-group row">
-                            <label for="sisa_bayar" class="col-sm-3 col-form-label">Sisa Bayar</label>
-                            <div class="col-sm-5">
-                                <div class="input-group">
-                                    <div class="input-group-prepend">
-                                        <span class="input-group-text">Rp.</span>
-                                    </div>
-                                    <input type="text" class="form-control" id="sisa_bayar_detail" name="sisa_bayar"
-                                        disabled>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Terbayar -->
-                        <div class="form-group row mt-3">
-                            <label for="terbayar" class="col-sm-3 col-form-label">Terbayar</label>
-                            <div class="col-sm-5">
-                                <div class="input-group">
-                                    <div class="input-group-prepend">
-                                        <span class="input-group-text">Rp.</span>
-                                    </div>
-                                    <input type="text" class="form-control" id="terbayar_detail" name="terbayar"
-                                        disabled>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="table-responsive piutang-history">
+                        <table class="table table-bordered table-sm mb-0">
+                            <thead><tr><th>Tanggal</th><th>No. Kwitansi</th><th>Keterangan</th>
+                                <th class="text-right">Nominal Transaksi</th><th class="text-right">Dialokasikan</th><th class="text-center">Lampiran</th></tr></thead>
+                            <tbody id="riwayat-piutang-detail"></tbody>
+                        </table>
                     </div>
                 </div>
-
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                        <span class="button-text">Keluar</span>
-                    </button>
-                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button></div>
             </div>
         </div>
     </div>
@@ -271,7 +262,6 @@
 @push('scripts')
     <script>
         previewFile('lampiran', 'previewLampiran');
-        previewFile('lampiran_detail', 'previewLampiranDetail');
 
         $(document).on('click', '[data-target="#modalForm"]', function() {
             $('#modalFormLabel').text('Tambah Piutang');
@@ -286,10 +276,22 @@
         });
 
         var permissions = @json($permissions);
-        var showActionColumn = (permissions['edit'] == 1 || permissions['hapus'] == 1);
+        var showActionColumn = true;
 
         $(function() {
             var table = $('.data-table').DataTable({
+                drawCallback: function() {
+                    let nominal = 0, terbayar = 0, sisa = 0;
+                    this.api().rows({ search: 'applied' }).data().each(function(row) {
+                        nominal += Number(row.nominal_raw) || 0;
+                        terbayar += Number(row.terbayar_raw) || 0;
+                        sisa += Number(row.sisa_bayar_raw) || 0;
+                    });
+                    const money = value => 'Rp ' + value.toLocaleString('id-ID');
+                    $('#summary-piutang').text(money(nominal));
+                    $('#summary-terbayar').text(money(terbayar));
+                    $('#summary-sisa').text(money(sisa));
+                },
                 processing: false,
                 serverSide: false,
                 ordering: false,
@@ -325,6 +327,20 @@
                         searchable: false
                     },
                     {
+                        data: 'terbayar',
+                        name: 'terbayar',
+                        orderable: false,
+                        searchable: false,
+                        className: 'text-right'
+                    },
+                    {
+                        data: 'sisa_bayar',
+                        name: 'sisa_bayar',
+                        orderable: false,
+                        searchable: false,
+                        className: 'text-right'
+                    },
+                    {
                         data: 'status',
                         name: 'status',
                         orderable: false,
@@ -354,6 +370,9 @@
             });
             $('#filter_tanggal').on('change', function() {
                 table.ajax.reload();
+            });
+            $(window).on('focus.piutang', function() {
+                table.ajax.reload(null, false);
             });
         });
 
@@ -391,10 +410,38 @@
 
         $(document).on('click', '.detail-button', function() {
             var url = $(this).data('url');
+            $('#riwayat-piutang-detail').empty();
             $.get(url, function(response) {
                 if (response.status === 'success') {
-                    $('#modalDetailLabel').text('Detail Piutang');
-                    $('#tanggal_piutang_detail').val(response.data.tanggal_piutang);
+                    $('#modalDetailLabel').text('Detail Piutang #' + response.data.id);
+                    $('#identitas-piutang-detail').text([
+                        response.customer,
+                        Number(response.data.status) === 2 ? 'Sudah Lunas' : 'Belum Lunas',
+                        response.data.tgl_pelunasan ? 'Pelunasan: ' + response.data.tgl_pelunasan : ''
+                    ].filter(Boolean).join(' • '));
+                    const history = $('#riwayat-piutang-detail');
+                    const money = value => 'Rp ' + Number(value || 0).toLocaleString('id-ID');
+                    (response.payments || []).forEach(function(payment) {
+                        const row = $('<tr>');
+                        [payment.tanggal, payment.no_kwitansi || '-', payment.keterangan || '-',
+                            money(payment.nominal_transaksi), money(payment.nominal)].forEach(function(value, index) {
+                            row.append($('<td>').toggleClass('text-right text-nowrap', index >= 3).text(value));
+                        });
+                        const attachment = $('<td>', { class: 'text-center' });
+                        if (payment.lampiran) {
+                            attachment.append($('<a>', {
+                                href: '{{ asset('assets/keuangan/pemasukan') }}/' + encodeURIComponent(payment.lampiran),
+                                target: '_blank', rel: 'noopener', class: 'btn btn-outline-primary btn-sm', text: 'Lihat'
+                            }));
+                        } else attachment.text('-');
+                        history.append(row.append(attachment));
+                    });
+                    if (!response.payments || !response.payments.length) {
+                        history.append($('<tr>').append($('<td>', { colspan: 6, class: 'text-center text-muted' })
+                            .text('Belum ada pembayaran untuk piutang ini.')));
+                    }
+                    const dateLabel = value => value ? new Date(String(value).slice(0, 10) + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+                    $('#tanggal_piutang_detail').val(dateLabel(response.data.tanggal_piutang));
                     $('#deskripsi_detail').val(response.data.deskripsi);
 
                     let nominal = parseFloat(response.data.nominal);
@@ -404,23 +451,35 @@
                         $('#nominal_detail').val('');
                     }
 
-                    setPreview(response.data.lampiran, 'assets/keuangan/pengeluaran',
-                        'previewLampiranDetail');
+                    const preview = $('#previewLampiranDetail').empty();
+                    if (response.data.lampiran) {
+                        const fileUrl = '{{ asset('assets/keuangan/pengeluaran') }}/' + encodeURIComponent(response.data.lampiran);
+                        const link = $('<a>', { href: fileUrl, target: '_blank', rel: 'noopener', class: 'text-center' });
+                        if (/\.pdf$/i.test(response.data.lampiran)) {
+                            link.append($('<i>', { class: 'far fa-file-pdf fa-3x text-danger d-block mb-2' }));
+                            link.append($('<span>').text('Lihat dokumen PDF'));
+                        } else {
+                            link.append($('<img>', { src: fileUrl, alt: 'Lampiran piutang' }));
+                            link.append($('<small>', { class: 'd-block mt-2' }).text('Buka lampiran'));
+                        }
+                        preview.append(link);
+                    } else preview.append($('<span>', { class: 'text-muted small' }).text('Tidak ada berkas'));
 
                     const terbayar = parseFloat(response.data.terbayar) || 0;
                     const sisaBayar = parseFloat(response.data.sisa_bayar) || 0;
 
                     $('#terbayar_detail').val(terbayar.toLocaleString('id-ID'));
                     $('#sisa_bayar_detail').val(sisaBayar.toLocaleString('id-ID'));
-                    $('#id_bank_detail').val(response.data.id_bank).trigger('change');
+                    const banks = @json($bankList->pluck('nama', 'id'));
+                    $('#id_bank_detail').val(banks[response.data.id_bank] || '-');
 
-                    $('#id_bank_detail').prop('disabled', true);
-                    $('#lampiran_detail').prop('disabled', true);
 
                     $('#info-pembayaran-detail').show();
 
                     $('#modalDetail').modal('show');
                 }
+            }).fail(function() {
+                toastr.error('Gagal memuat detail piutang.');
             });
         });
 
@@ -590,4 +649,20 @@
             input.value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
         }
     </script>
+@endpush
+
+@push('css')
+<style>
+    #modalDetail .modal-content { border: 0; border-radius: 12px; overflow: hidden; }
+    #modalDetail .piutang-summary { padding: 16px; border: 1px solid #dee2e6; border-radius: 8px; background: rgba(128,128,128,.04); }
+    #modalDetail .piutang-summary label { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+    #modalDetail .piutang-amount { width: 100%; min-width: 0; padding: 0; border: 0; outline: none; background: transparent; color: inherit; font-size: 21px; font-weight: 700; }
+    #modalDetail .piutang-attachment { min-height: 160px; padding: 12px; border: 1px dashed #ced4da; border-radius: 8px; overflow: hidden; }
+    #modalDetail .piutang-attachment img { max-width: 100%; max-height: 180px; object-fit: contain; }
+    #modalDetail .piutang-history { border-radius: 6px; }
+    #modalDetail .piutang-history th { white-space: nowrap; font-size: 12px; padding: 12px; background: rgba(128,128,128,.08); }
+    #modalDetail .piutang-history td { padding: 12px; vertical-align: middle; font-size: 13px; }
+    #modalDetail .form-control[readonly] { background: rgba(128,128,128,.04); }
+    #modalDetail #identitas-piutang-detail { color: rgba(255,255,255,.85); }
+</style>
 @endpush

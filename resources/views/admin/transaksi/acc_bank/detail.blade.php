@@ -85,9 +85,11 @@
                                             <th width="3%">No</th>
                                             <th>Bank KPR</th>
                                             <th>ACC Plafon</th>
+                                            <th>DP ke Bank</th>
                                             <th>Tgl SP3K</th>
                                             <th>Tgl Expired</th>
                                             <th>Sisa Hari</th>
+                                            <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -134,6 +136,9 @@
                         searchable: false
                     },
                     {
+                        data: 'dp_nilai', name: 'dp_nilai', orderable: false, searchable: false
+                    },
+                    {
                         data: 'tgl_terbit_sp3k',
                         name: 'tgl_terbit_sp3k',
                         orderable: false,
@@ -150,7 +155,8 @@
                         name: 'sisa_hari',
                         orderable: false,
                         searchable: false,
-                    }
+                    },
+                    { data: 'action', name: 'action', orderable: false, searchable: false }
                 ],
                 columnDefs: [{
                     targets: 0,

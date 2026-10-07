@@ -270,14 +270,14 @@ class PembayaranController extends Controller
         $pdf->Cell($valueW, 6, number_format($jumlahBayar, 0, ',', '.'), 0, 1, 'R');
 
         $pdf->SetX($labelX+5);
-        $pdf->Cell($labelW, 6, 'Estimasi Plafon', 0, 0);
+        $pdf->Cell($labelW, 6, 'Plafon SP3K', 0, 0);
         $pdf->Cell(3, 6, ': Rp.', 0, 0);
-        $pdf->Cell($valueW, 6, number_format($customer->estimasi_plafon ?? 0, 0, ',', '.'), 0, 1, 'R');
+        $pdf->Cell($valueW, 6, number_format(app(\App\Services\Sp3kPlafonService::class)->latestForCustomer($customer->id)?->acc_plafon ?? 0, 0, ',', '.'), 0, 1, 'R');
 
         $pdf->SetX($labelX+5);
         $pdf->Cell($labelW, 6, 'DP ke Bank', 0, 0);
         $pdf->Cell(3, 6, ': Rp.', 0, 0);
-        $pdf->Cell($valueW, 6, number_format($customer->sbum ?? 0, 0, ',', '.'), 0, 1, 'R');
+        $pdf->Cell($valueW, 6, number_format(app(\App\Services\Sp3kPlafonService::class)->latestForCustomer($customer->id)?->dp_nilai ?? 0, 0, ',', '.'), 0, 1, 'R');
 
         $pdf->SetX($labelX+5);
         $pdf->Cell($labelW, 6, 'Sisa Bayar', 0, 0);
@@ -679,6 +679,12 @@ class PembayaranController extends Controller
             }
         ])->findOrFail($id);
 
+        $sp3k = app(\App\Services\Sp3kPlafonService::class)->latestForCustomer($customer->id);
+        $sp3k?->load('bankKPR');
+        $plafonSp3k = (int) ($sp3k?->acc_plafon ?? 0);
+        $akadSelesai = app(\App\Services\KprDisbursementService::class)->akadDate($id);
+        $ringkasanKpr = app(\App\Services\KprDisbursementService::class)->summary($id);
+
         $metodeBayar                = MetodeBayar::all();
         $bankList                   = Bank::all();
         $kategoriTransaksiPemasukan = KategoriTransaksi::where('jenis_kategori', 'PEMASUKAN')
@@ -712,6 +718,10 @@ class PembayaranController extends Controller
         $sisaBayar = $this->getSisaBayarCustomer($id);
 
         return view('admin.pembayaran.detail', compact(
+            'sp3k',
+            'plafonSp3k',
+            'akadSelesai',
+            'ringkasanKpr',
             'jumlahBayar',
             'sisaBayar',
             'customer',
@@ -733,7 +743,9 @@ class PembayaranController extends Controller
     private function getJumlahBayarCustomer($customerId)
     {
         return Pemasukan::where('id_customer', $customerId)
-            ->where('keterangan', 'NOT LIKE', 'Biaya ganti nama%')
+            ->where(function ($query) {
+                $query->whereNull('keterangan')->orWhere('keterangan', 'NOT LIKE', 'Biaya ganti nama%');
+            })
             ->sum('nominal');
     }
 
@@ -869,74 +881,6 @@ class PembayaranController extends Controller
         }
     }
 
-    public function updateEstimasiPlafon(Request $request, $id)
-    {
-        try {
-            $request->validate([
-                'estimasi_plafon' => 'required',
-            ]);
-
-            $customer = Customer::findOrFail($id);
-            $estimasiPlafon = (int) str_replace(['.', ','], '', $request->estimasi_plafon);
-
-            $customer->update(['estimasi_plafon' => $estimasiPlafon]);
-
-            $totalTagihan = $this->getTotalTagihanCustomer($id);
-            $jumlahBayar  = $this->getJumlahBayarCustomer($id);
-            $sisaBayar    = max($totalTagihan - $jumlahBayar, 0);
-
-            return response()->json([
-                'status'                    => 'success',
-                'estimasi_plafon_formatted' => number_format($estimasiPlafon, 0, ',', '.'),
-                'total_tagihan_formatted'   => number_format($totalTagihan, 0, ',', '.'),
-                'jumlah_bayar_formatted'    => number_format($jumlahBayar, 0, ',', '.'),
-                'sisa_bayar_formatted'      => number_format($sisaBayar, 0, ',', '.'),
-            ]);
-        } catch (\Exception $e) {
-            Log::error($e->getMessage());
-
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Gagal mengupdate estimasi plafon.',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
-    public function updateSbum(Request $request, $id)
-    {
-        try {
-            $request->validate([
-                'sbum' => 'required',
-            ]);
-
-            $customer = Customer::findOrFail($id);
-            $sbum = (int) str_replace(['.', ','], '', $request->sbum);
-
-            $customer->update(['sbum' => $sbum]);
-
-            $totalTagihan = $this->getTotalTagihanCustomer($id);
-            $jumlahBayar  = $this->getJumlahBayarCustomer($id);
-            $sisaBayar    = max($totalTagihan - $jumlahBayar, 0);
-
-            return response()->json([
-                'status'                  => 'success',
-                'sbum_formatted'          => number_format($sbum, 0, ',', '.'),
-                'total_tagihan_formatted' => number_format($totalTagihan, 0, ',', '.'),
-                'jumlah_bayar_formatted'  => number_format($jumlahBayar, 0, ',', '.'),
-                'sisa_bayar_formatted'    => number_format($sisaBayar, 0, ',', '.'),
-            ]);
-        } catch (\Exception $e) {
-            Log::error($e->getMessage());
-
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Gagal mengupdate DP ke Bank.',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
     public function DeleteTagihan($id)
     {
         $tagihan     = Piutang::findOrFail($id);
@@ -1031,6 +975,11 @@ class PembayaranController extends Controller
                 $editUrl                = route('pembayaran.edit-pemasukan', $item->id);
                 $item->tanggal          = '<div>' . Carbon::parse($item->tanggal)->translatedFormat('d F Y') . '</div>'
                     . '<div class="text-muted" style="font-size:11px;">' . ($item->no_kwitansi ?? '-') . '</div>';
+                if ($item->plafon_sp3k !== null) {
+                    $reference = $item->no_sp3k ? 'SP3K ' . $item->no_sp3k : 'Acuan pencairan lama';
+                    $item->tanggal .= '<div class="text-muted small">' . e($reference) . ': Rp '
+                        . number_format($item->plafon_sp3k, 0, ',', '.') . '</div>';
+                }
                 $item->kategori         = $item->kategori->kategori ?? '-';
                 $item->jumlah_formatted = '
                     <div class="d-flex justify-content-between">
@@ -1077,7 +1026,7 @@ class PembayaranController extends Controller
             'id_kategori_transaksi' => 'required|in:4,5,6,8',
             'id_bank'               => 'required',
             'id_metode_bayar'       => 'required',
-            'id_tagihan'            => 'required_if:id_kategori_transaksi,17',
+            'id_tagihan'            => ['nullable', 'integer', \Illuminate\Validation\Rule::exists('piutang', 'id')->where('id_customer', $id)],
             'nominal_bayar'         => 'required',
             'keterangan_pembayaran' => 'required',
             'file'                  => 'required_if:id_metode_bayar,2|file|mimes:jpeg,png,jpg,webp,pdf|max:2048',
@@ -1141,56 +1090,8 @@ class PembayaranController extends Controller
 
             $this->logCreate('Detail Pembayaran', $pemasukan->id);
 
-            if ($request->id_kategori_transaksi == 17) {
-                $piutang = Piutang::find($request->id_tagihan);
-                if ($piutang) {
-                    $piutang->update([
-                        'terbayar'   => $piutang->terbayar + str_replace('.', '', $request->nominal_bayar),
-                        'sisa_bayar' => $piutang->sisa_bayar - str_replace('.', '', $request->nominal_bayar),
-                    ]);
-                }
-            } else {
-                $sisaBayar = str_replace('.', '', $request->nominal_bayar);
-
-                $piutangs = Piutang::where('id_customer', $id)
-                    ->where('status', 1)
-                    ->orderBy('id')
-                    ->get();
-
-                foreach ($piutangs as $piutang) {
-                    if ($sisaBayar <= 0) {
-                        break;
-                    }
-
-                    if ($sisaBayar >= $piutang->sisa_bayar) {
-                        $sisaBayar -= $piutang->sisa_bayar;
-
-                        $piutang->update([
-                            'terbayar'      => $piutang->terbayar + $piutang->sisa_bayar,
-                            'sisa_bayar'    => 0,
-                            'status'        => 2,
-                            'tgl_pelunasan' => $request->tanggal_pembayaran,
-                        ]);
-                    } else {
-                        $piutang->update([
-                            'terbayar'   => $piutang->terbayar + $sisaBayar,
-                            'sisa_bayar' => $piutang->sisa_bayar - $sisaBayar,
-                        ]);
-
-                        $sisaBayar = 0;
-                    }
-                }
-
-                $masihAdaPiutang = Piutang::where('id_customer', $id)
-                    ->where('status', 1)
-                    ->exists();
-
-                if (
-                    ! $masihAdaPiutang &&
-                    $request->id_kategori_transaksi == 5
-                ) {
-                    $cust->update(['id_status_progres' => 8]);
-                }
+            if ($request->id_kategori_transaksi == 5 && !Piutang::where('id_customer', $id)->where('status', 1)->exists()) {
+                $cust->update(['id_status_progres' => 8]);
             }
 
             $totalTagihan = $this->getTotalTagihanCustomer($id);
@@ -1219,21 +1120,26 @@ class PembayaranController extends Controller
     public function tambahPencairanKpr(Request $request, $id)
     {
         $request->validate([
-            'tanggal_pencairan' => 'required|date',
+            'tanggal_pencairan' => 'required|date|before_or_equal:today',
+            'id_sp3k' => 'required|integer|min:1',
             'jumlah_plafon' => 'required',
-            'jumlah_pencairan' => 'required',
+            'jumlah_pencairan' => ['required', 'regex:/^\d+(?:\.\d{3})*$/'],
+            'retensi' => 'nullable|array',
+            'retensi.*' => ['required', 'regex:/^\d+(?:\.\d{3})*$/'],
         ], [
             'tanggal_pencairan.required' => 'Tanggal pencairan wajib diisi.',
             'jumlah_plafon.required' => 'Jumlah plafon wajib diisi.',
             'jumlah_pencairan.required' => 'Jumlah pencairan wajib diisi.',
+            'id_sp3k.required' => 'SP3K belum tersedia. Isi SP3K terlebih dahulu.',
         ]);
 
         $customer = Customer::findOrFail($id);
-        $estimasiPlafon = (int) ($customer->estimasi_plafon ?? 0);
+        $sp3k = app(\App\Services\Sp3kPlafonService::class)->latestForCustomer($customer->id);
+        $estimasiPlafon = (int) ($sp3k?->acc_plafon ?? 0);
 
         if ($estimasiPlafon <= 0) {
             return response()->json([
-                'message' => 'Estimasi plafon belum diisi. Silakan isi terlebih dahulu.',
+                'message' => 'Plafon SP3K belum tersedia. Isi SP3K terlebih dahulu melalui menu Proses Bank / SP3K.',
             ], 422);
         }
 
@@ -1246,21 +1152,42 @@ class PembayaranController extends Controller
             $totalRetensi += (int) str_replace('.', '', $nominal ?? 0);
         }
 
-        if ($jumlahPlafon !== ($jumlahPencairan + $totalRetensi)) {
+        if ($jumlahPlafon !== $estimasiPlafon || (int) $request->id_sp3k !== (int) $sp3k->id) {
             return response()->json([
-                'message' => 'Jumlah plafon harus sama dengan jumlah pencairan ditambah total retensi.',
-            ], 422);
-        }
-
-        if ($jumlahPlafon !== $estimasiPlafon) {
-            return response()->json([
-                'message' => 'Jumlah plafon harus sama dengan nilai estimasi plafon pada halaman pembayaran.',
+                'message' => 'Plafon SP3K telah berubah. Muat ulang halaman pembayaran dan gunakan plafon SP3K terbaru.',
             ], 422);
         }
 
         DB::beginTransaction();
         try {
+            Customer::whereKey($id)->lockForUpdate()->firstOrFail();
+            $currentSp3k = app(\App\Services\Sp3kPlafonService::class)->latestForCustomer($id, true);
+            if (!$currentSp3k || (int) $currentSp3k->acc_plafon !== $jumlahPlafon || $currentSp3k->id !== $sp3k->id) {
+                DB::rollBack();
+                return response()->json(['message' => 'SP3K berubah. Muat ulang halaman pembayaran.'], 422);
+            }
+            $service = app(\App\Services\KprDisbursementService::class);
+            $akadDate = $service->akadDate($id);
+            $summary = $service->summary($id);
+            $message = null;
+            if (!$akadDate || Carbon::parse($request->tanggal_pencairan)->lt(Carbon::parse($akadDate)->startOfDay())) {
+                $message = 'Pencairan hanya dapat diinput setelah customer hadir/selesai akad. Tanggal pencairan tidak boleh sebelum akad.';
+            } elseif ($jumlahPencairan <= 0 || $summary['total_pencairan'] + $jumlahPencairan > $jumlahPlafon) {
+                $message = 'Jumlah pencairan harus lebih dari nol dan total seluruh pencairan tidak boleh melebihi plafon SP3K.';
+            } elseif ($summary['total_pencairan'] + $jumlahPencairan + $totalRetensi !== $jumlahPlafon) {
+                $message = 'Total pencairan sebelumnya, pencairan saat ini, dan sisa retensi harus sama dengan plafon SP3K.';
+            } elseif (Retensi::whereIn('id', array_keys($retensiInput))->count() !== count($retensiInput)) {
+                $message = 'Jenis retensi tidak valid.';
+            }
+            if ($message) {
+                DB::rollBack();
+                return response()->json(['message' => $message], 422);
+            }
             $pemasukan = Pemasukan::create([
+                'id_sp3k' => $currentSp3k->id,
+                'no_sp3k' => $currentSp3k->no_sp3k,
+                'plafon_sp3k' => $jumlahPlafon,
+                'id_bank_kpr_sp3k' => $currentSp3k->id_bank_kpr,
                 'tanggal' => $request->tanggal_pencairan,
                 'id_customer' => $id,
                 'id_bank' => 0,
@@ -1292,6 +1219,7 @@ class PembayaranController extends Controller
             DB::commit();
 
             return response()->json([
+                ...app(\App\Services\KprDisbursementService::class)->summary($id),
                 'success' => true,
                 'jumlah_bayar' => number_format($this->getJumlahBayarCustomer($id), 0, ',', '.'),
                 'total_tagihan' => number_format($this->getTotalTagihanCustomer($id), 0, ',', '.'),
@@ -1314,46 +1242,15 @@ class PembayaranController extends Controller
         try {
             $pemasukan   = Pemasukan::findOrFail($id);
             $id_customer = $pemasukan->id_customer; // simpan dulu sebelum delete
+            Customer::whereKey($id_customer)->lockForUpdate()->first();
+            if ($pemasukan->plafon_sp3k !== null && Pemasukan::where('id_customer', $id_customer)
+                ->where('id_kategori_transaksi', $pemasukan->id_kategori_transaksi)->where('id', '>', $id)->exists()) {
+                DB::rollBack();
+                return response()->json(['message' => 'Hapus pencairan dari tahap terakhir terlebih dahulu agar sisa retensi tetap sesuai.'], 422);
+            }
 
             if (!empty($pemasukan->lampiran) && file_exists(public_path('assets/keuangan/pemasukan/' . $pemasukan->lampiran))) {
                 unlink(public_path('assets/keuangan/pemasukan/' . $pemasukan->lampiran));
-            }
-
-            if ($pemasukan->id_kategori_transaksi != 4) {
-                $nominal = $pemasukan->nominal;
-
-                $piutangs = Piutang::where('id_customer', $id_customer)
-                    ->where('terbayar', '>', 0)
-                    ->orderByDesc('id')
-                    ->lockForUpdate()
-                    ->get();
-
-                foreach ($piutangs as $piutang) {
-                    if ($nominal <= 0) {
-                        break;
-                    }
-
-                    if ($nominal >= $piutang->terbayar) {
-                        $nominal -= $piutang->terbayar;
-
-                        $piutang->update([
-                            'sisa_bayar'    => $piutang->sisa_bayar + $piutang->terbayar,
-                            'terbayar'      => 0,
-                            'tgl_pelunasan' => null,
-                        ]);
-                    } else {
-                        $piutang->update([
-                            'sisa_bayar' => $piutang->sisa_bayar + $nominal,
-                            'terbayar'   => $piutang->terbayar - $nominal,
-                        ]);
-
-                        $nominal = 0;
-                    }
-
-                    $piutang->update([
-                        'status' => $piutang->terbayar == $piutang->nominal ? 2 : 1,
-                    ]);
-                }
             }
 
             PemasukanRetensi::where('id_pemasukan', $pemasukan->id)->delete();
@@ -1369,6 +1266,7 @@ class PembayaranController extends Controller
             DB::commit();
 
             return response()->json([
+                ...app(\App\Services\KprDisbursementService::class)->summary($id_customer),
                 'status'        => 'success',
                 'jumlah_bayar'  => number_format($jumlahBayar, 0, ',', '.'),
                 'total_tagihan' => number_format($totalTagihan, 0, ',', '.'),
@@ -1409,6 +1307,20 @@ class PembayaranController extends Controller
         DB::beginTransaction();
         try {
             $pemasukan = Pemasukan::findOrFail($id);
+            if ($pemasukan->plafon_sp3k === null && KategoriTransaksi::where('kategori', 'Pencairan KPR')
+                ->whereKey($request->id_kategori_transaksi)->exists()) {
+                DB::rollBack();
+                return response()->json(['message' => 'Gunakan input pencairan KPR agar akad dan batas plafon diperiksa.'], 422);
+            }
+            if ($pemasukan->plafon_sp3k !== null) {
+                $retensi = (int) PemasukanRetensi::where('id_pemasukan', $id)->sum('nominal');
+                $nominal = (int) str_replace('.', '', $request->nominal_bayar);
+                if ($nominal !== (int) $pemasukan->nominal
+                    || (int) $request->id_kategori_transaksi !== (int) $pemasukan->id_kategori_transaksi) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Pencairan harus sesuai plafon SP3K dan retensi yang dicatat. Koreksi melalui input pencairan KPR.'], 422);
+                }
+            }
 
             if ($request->hasFile('file')) {
                 if (!empty($pemasukan->lampiran) && file_exists(public_path('assets/keuangan/pemasukan/' . $pemasukan->lampiran))) {

@@ -1,4 +1,4 @@
-﻿@extends('admin.layout_admin')
+@extends('admin.layout_admin')
 
 @section('content')
     <style>
@@ -184,7 +184,7 @@
 
     .pipeline {
       display: grid;
-      grid-template-columns: repeat(7, minmax(145px, 1fr));
+      grid-template-columns: repeat(4, minmax(145px, 1fr));
       gap: 24px;
       overflow-x: auto;
       padding: 2px 5px 10px;
@@ -386,8 +386,13 @@
     .bar {
       width: 50%;
       border-radius: 6px 6px 0 0;
-      min-height: 8px;
+      min-height: 0;
     }
+
+    .bar { position: relative; }
+    .bar-value { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--text); }
+    .chart-box { overflow-x: auto; }
+    .bar-chart { min-width: 540px; }
 
     .bar.target { background: #ddd6fe; }
     .bar.actual { background: #5b2cff; }
@@ -624,28 +629,16 @@
               <a class="pipeline-btn" href="{{ route('pengajuan-hold.index') }}">Buka Menu <i class="fa-solid fa-arrow-right"></i></a>
             </article>
 
-            <article class="pipeline-card c-cyan">
-              <h3>SPPR</h3>
-              <div class="count">{{ $pipelineCounts['sppr'] ?? 0 }}</div>
-              <a class="pipeline-btn" href="{{ route('sppr.index') }}">Buka Menu <i class="fa-solid fa-arrow-right"></i></a>
-            </article>
-
             <article class="pipeline-card c-green">
-              <h3>Wawancara</h3>
+              <h3>Proses Bank</h3>
               <div class="count">{{ $pipelineCounts['wawancara'] ?? 0 }}</div>
               <a class="pipeline-btn" href="{{ route('wawancara.index') }}">Buka Menu <i class="fa-solid fa-arrow-right"></i></a>
             </article>
 
             <article class="pipeline-card c-orange">
-              <h3>ACC Bank</h3>
+              <h3>SP3K</h3>
               <div class="count">{{ $pipelineCounts['acc_bank'] ?? 0 }}</div>
               <a class="pipeline-btn" href="{{ route('acc-bank.index') }}">Buka Menu <i class="fa-solid fa-arrow-right"></i></a>
-            </article>
-
-            <article class="pipeline-card c-pink">
-              <h3>PPJB</h3>
-              <div class="count">{{ $pipelineCounts['ppjb'] ?? 0 }}</div>
-              <a class="pipeline-btn" href="{{ route('ppjb.index') }}">Buka Menu <i class="fa-solid fa-arrow-right"></i></a>
             </article>
 
             <article class="pipeline-card c-purple">
@@ -654,11 +647,6 @@
               <a class="pipeline-btn" href="{{ route('akad.index') }}">Buka Menu <i class="fa-solid fa-arrow-right"></i></a>
             </article>
 
-            <article class="pipeline-card c-blue">
-              <h3>BAST</h3>
-              <div class="count">{{ $pipelineCounts['bast'] ?? 0 }}</div>
-              <a class="pipeline-btn" href="{{ route('bast.index') }}">Buka Menu <i class="fa-solid fa-arrow-right"></i></a>
-            </article>
           </div>
 
         </div>
@@ -730,25 +718,31 @@
           <div class="panel-body">
             <div class="section-head">
               <h2>Grafik Penjualan Bulanan <span>(Semua Project)</span></h2>
-              <button class="filter-btn">Tahun 2026 <i class="fa-solid fa-chevron-down"></i></button>
+              <form method="GET" action="{{ url()->current() }}">
+                <label class="sr-only" for="tahun-grafik">Tahun grafik</label>
+                <select id="tahun-grafik" name="tahun" class="filter-btn" onchange="this.form.submit()">
+                  @foreach ($chartYears as $year)
+                    <option value="{{ $year }}" @selected($chartYear === $year)>Tahun {{ $year }}</option>
+                  @endforeach
+                </select>
+              </form>
             </div>
 
             <div class="chart-box">
               <div class="bar-chart">
-                <div class="bar-group"><div class="bar target" style="height:42%"></div><div class="bar actual" style="height:34%"></div><span class="bar-label">Jan</span></div>
-                <div class="bar-group"><div class="bar target" style="height:51%"></div><div class="bar actual" style="height:47%"></div><span class="bar-label">Feb</span></div>
-                <div class="bar-group"><div class="bar target" style="height:62%"></div><div class="bar actual" style="height:68%"></div><span class="bar-label">Mar</span></div>
-                <div class="bar-group"><div class="bar target" style="height:58%"></div><div class="bar actual" style="height:63%"></div><span class="bar-label">Apr</span></div>
-                <div class="bar-group"><div class="bar target" style="height:70%"></div><div class="bar actual" style="height:68%"></div><span class="bar-label">Mei</span></div>
-                <div class="bar-group"><div class="bar target" style="height:82%"></div><div class="bar actual" style="height:53%"></div><span class="bar-label">Jun</span></div>
-                <div class="bar-group"><div class="bar target" style="height:54%"></div><div class="bar actual" style="height:50%"></div><span class="bar-label">Jul</span></div>
-                <div class="bar-group"><div class="bar target" style="height:72%"></div><div class="bar actual" style="height:41%"></div><span class="bar-label">Agu</span></div>
-                <div class="bar-group"><div class="bar target" style="height:45%"></div><div class="bar actual" style="height:31%"></div><span class="bar-label">Sep</span></div>
-                <div class="bar-group"><div class="bar target" style="height:83%"></div><div class="bar actual" style="height:50%"></div><span class="bar-label">Okt</span></div>
-                <div class="bar-group"><div class="bar target" style="height:65%"></div><div class="bar actual" style="height:45%"></div><span class="bar-label">Nov</span></div>
-                <div class="bar-group"><div class="bar target" style="height:55%"></div><div class="bar actual" style="height:39%"></div><span class="bar-label">Des</span></div>
+                @foreach ($monthlySales as $month => $counts)
+                  <div class="bar-group">
+                    <div class="bar target" style="height:{{ $counts['booking'] / $chartMax * 100 }}%" title="Booking: {{ $counts['booking'] }}" aria-label="Booking {{ $month }}: {{ $counts['booking'] }}">
+                      <span class="bar-value">{{ $counts['booking'] }}</span>
+                    </div>
+                    <div class="bar actual" style="height:{{ $counts['akad'] / $chartMax * 100 }}%" title="Akad: {{ $counts['akad'] }}" aria-label="Akad {{ $month }}: {{ $counts['akad'] }}">
+                      <span class="bar-value">{{ $counts['akad'] }}</span>
+                    </div>
+                    <span class="bar-label">{{ ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][$month - 1] }}</span>
+                  </div>
+                @endforeach
               </div>
-              <div class="legend"><span><i style="background:#ddd6fe"></i>Target</span><span><i style="background:#5b2cff"></i>Realisasi</span></div>
+              <div class="legend"><span><i style="background:#ddd6fe"></i>Booking</span><span><i style="background:#5b2cff"></i>Akad</span></div>
             </div>
           </div>
         </article>

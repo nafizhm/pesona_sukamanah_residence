@@ -7,6 +7,7 @@ use App\Models\Bank;
 use App\Models\Pemasukan;
 use App\Models\Pengeluaran;
 use App\Models\Piutang;
+use App\Services\PiutangPaymentService;
 use App\Traits\LogAktivitasTrait;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class PiutangController extends Controller
         $permissions = HakAksesController::getUserPermissions();
 
         if ($request->ajax()) {
+            app(PiutangPaymentService::class)->syncAll();
             $data = Piutang::query()->orderByDesc('tanggal_piutang');
 
             if ($request->filled('filter_tanggal')) {
@@ -31,6 +33,9 @@ class PiutangController extends Controller
             
             return DataTables::of($data)
                 ->addIndexColumn()
+                ->addColumn('nominal_raw', fn ($row) => (int) $row->getRawOriginal('nominal'))
+                ->addColumn('terbayar_raw', fn ($row) => (int) $row->getRawOriginal('terbayar'))
+                ->addColumn('sisa_bayar_raw', fn ($row) => (int) $row->getRawOriginal('sisa_bayar'))
                 ->addColumn('tanggal_piutang', function ($row) {
                     return Carbon::parse($row->tanggal_piutang)->translatedFormat('j F Y');
                 })
@@ -51,6 +56,8 @@ class PiutangController extends Controller
                             return '<span class="badge bg-warning">Status Tidak Dikenal</span>';
                     }
                 })
+                ->editColumn('terbayar', fn ($row) => number_format($row->terbayar, 0, ',', '.'))
+                ->editColumn('sisa_bayar', fn ($row) => number_format($row->sisa_bayar, 0, ',', '.'))
                 ->addColumn('lampiran', function ($row) {
                     if ($row->lampiran) {
                         return '<button class="btn btn-sm btn-success show-lampiran" data-file="' . e($row->lampiran) . '" data-toggle="modal" data-target="#modallampiran">Lihat</button>';
@@ -76,13 +83,12 @@ class PiutangController extends Controller
 
                     $btn = '<div class="d-flex justify-content-center">';
 
-                    if ($isDetailOnly) {
-                        $btn .= '<button class="btn btn-primary btn-sm mx-1 detail-button"
+                    $btn .= '<button class="btn btn-primary btn-sm mx-1 detail-button"
             data-id="' . e($row->id) . '"
             data-url="' . e($detailUrl) . '">
             Detail
         </button>';
-                    } else {
+                    if (!$isDetailOnly) {
                         if ($permissions['edit']) {
                             $btn .= '<button class="btn btn-primary btn-sm mx-1 edit-button"
                 data-id="' . e($row->id) . '"
@@ -122,6 +128,7 @@ class PiutangController extends Controller
 
     public function edit($id)
     {
+        app(PiutangPaymentService::class)->syncPiutang($id);
         $list = Piutang::findOrFail($id);
 
         return response()->json([
@@ -131,11 +138,14 @@ class PiutangController extends Controller
     }
     public function show($id)
     {
+        $payments = app(PiutangPaymentService::class)->syncPiutang($id);
         $list = Piutang::findOrFail($id);
 
         return response()->json([
             'status' => 'success',
             'data'   => $list,
+            'payments' => $payments,
+            'customer' => $list->id_customer ? \App\Models\Customer::find($list->id_customer)?->nama_lengkap : null,
         ]);
     }
 
@@ -200,6 +210,7 @@ class PiutangController extends Controller
     public function update(Request $request, $id)
     {
         $data = Piutang::findOrFail($id);
+        abort_if($data->id_customer, 422, 'Piutang customer diubah melalui menu pembayaran.');
 
         $rules = [
             'tanggal_piutang' => 'required|date',
@@ -231,7 +242,6 @@ class PiutangController extends Controller
             'deskripsi'       => $request->deskripsi,
             'id_bank'         => $request->id_bank,
             'nominal'         => str_replace('.', '', $request->nominal),
-            'sisa_bayar'      => str_replace('.', '', $request->nominal),
         ];
 
         $filename = $data->lampiran;
@@ -253,8 +263,8 @@ class PiutangController extends Controller
         $this->logEdit('Piutang', $data->id);
 
         $pengeluaran = Pengeluaran::where('id_piutang', $id)->first();
-        $pengeluaran->update([
-            'tanggal'  => $request->tanggal_hutang,
+        $pengeluaran?->update([
+            'tanggal'  => $request->tanggal_piutang,
             'id_bank'  => $request->id_bank,
             'nominal'  => str_replace('.', '', $request->nominal),
             'lampiran' => $filename,
@@ -266,6 +276,8 @@ class PiutangController extends Controller
     public function destroy($id)
     {
         $data = Piutang::findOrFail($id);
+        abort_if($data->id_customer, 422, 'Piutang customer dikelola melalui menu pembayaran.');
+        abort_if(Pemasukan::where('id_piutang', $id)->exists(), 422, 'Piutang dengan riwayat pembayaran tidak dapat dihapus.');
         if (! empty($data->lampiran) && file_exists(public_path('assets/keuangan/pengeluaran/' . $data->lampiran))) {
             unlink(public_path('assets/keuangan/pengeluaran/' . $data->lampiran));
         }
@@ -295,6 +307,7 @@ class PiutangController extends Controller
 
     public function getSisaBayar($id)
     {
+        app(PiutangPaymentService::class)->syncPiutang($id);
         $hutang = Piutang::find($id);
 
         if (! $hutang) {

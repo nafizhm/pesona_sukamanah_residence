@@ -77,19 +77,28 @@
                             </div>
 
                             <div class="form-group row">
-                                <label class="control-label col-sm-4">Estimasi Plafon</label>
+                                <label class="control-label col-sm-4">Plafon Disetujui (SP3K)</label>
                                 <div class="col-sm-5">
                                     <div class="input-group">
                                         <div class="input-group-prepend">
                                             <span class="input-group-text">Rp.</span>
                                         </div>
-                                        <input class="form-control text-right format-number" type="text" id="estimasi_plafon"
-                                            value="{{ number_format($customer->estimasi_plafon ?? 0, 0, ',', '.') }}"
+                                        <input class="form-control text-right format-number" type="text" id="plafon_sp3k"
+                                            value="{{ number_format($plafonSp3k, 0, ',', '.') }}"
                                             readonly>
-                                        <div class="input-group-append">
-                                            <button type="button" class="btn btn-success" id="save-estimasi-plafon" style="padding-left:14px;padding-right:14px"><i class="fa fa-check"></i></button>
-                                        </div>
+
                                     </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group row">
+                                <div class="offset-sm-4 col-sm-8 text-muted small">
+                                    @if ($sp3k && $plafonSp3k > 0)
+                                        SP3K {{ $sp3k->no_sp3k }} • {{ $sp3k->bankKPR?->nama ?? '-' }}
+                                    @else
+                                        SP3K belum tersedia.
+                                        <a href="{{ route('wawancara.index') }}">Isi SP3K melalui menu Proses Bank</a>.
+                                    @endif
                                 </div>
                             </div>
 
@@ -100,13 +109,27 @@
                                         <div class="input-group-prepend">
                                             <span class="input-group-text">Rp.</span>
                                         </div>
-                                        <input class="form-control text-right format-number" type="text" id="sbum"
-                                            value="{{ number_format($customer->sbum ?? 0, 0, ',', '.') }}"
-                                            readonly>
-                                        <div class="input-group-append">
-                                            <button type="button" class="btn btn-success" id="save-sbum" style="padding-left:14px;padding-right:14px"><i class="fa fa-check"></i></button>
-                                        </div>
+                                        <input class="form-control text-right format-number" type="text" id="dp_bank_sp3k"
+                                            value="{{ $sp3k?->dp_nilai !== null ? number_format($sp3k->dp_nilai, 0, ',', '.') : '' }}"
+                                            placeholder="DP belum diisi pada SP3K" readonly>
+
                                     </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group row">
+                                <div class="offset-sm-4 col-sm-8 text-muted small">
+                                    @if ($sp3k?->dp_nilai !== null)
+                                        DP sesuai SP3K {{ $sp3k->no_sp3k }}
+                                        @if ($sp3k->dp_mode === 'persentase')
+                                            ({{ number_format($sp3k->dp_persen, 2, ',', '.') }}% dari plafon SP3K).
+                                        @else
+                                            (berdasarkan nominal).
+                                        @endif
+                                    @else
+                                        DP belum diisi pada SP3K.
+                                        <a href="{{ route('wawancara.index') }}">Lengkapi melalui input SP3K</a>.
+                                    @endif
                                 </div>
                             </div>
 
@@ -180,7 +203,7 @@
                                     <h5>- Pemasukan -</h5>
                                 </div>
                                 <div>
-                                    <button class="btn btn-warning btn-sm mr-2" type="button" id="btnPencairanKpr">
+                                    <button class="btn btn-warning btn-sm mr-2" type="button" id="btnPencairanKpr" @disabled(!$akadSelesai) title="{{ $akadSelesai ? 'Catat pencairan bertahap' : 'Customer harus hadir/selesai akad terlebih dahulu' }}">
                                         <i class="fa fa-university"></i> Pencairan KPR
                                     </button>
                                     <button class="btn btn-success btn-sm" data-toggle="modal" data-target="#modalPemasukan"><i
@@ -230,6 +253,14 @@
                 <form id="formPencairanKpr">
                     @csrf
                     <input type="hidden" id="pencairan_primary_id" name="primary_id" value="{{ $customer->id }}">
+                    <input type="hidden" name="id_sp3k" value="{{ $sp3k?->id }}">
+                    <div class="px-3 pt-3">
+                        <div class="alert alert-info mb-0">
+                            Sudah cair: <strong id="kpr_total_cair">{{ number_format($ringkasanKpr['total_pencairan'], 0, ',', '.') }}</strong>.
+                            Sisa plafon: <strong id="kpr_sisa_plafon">{{ number_format($ringkasanKpr['sisa_plafon'], 0, ',', '.') }}</strong>.
+                            <div class="small mt-1">Isi pencairan tahap ini dan retensi yang masih ditahan setelah pencairan ini. Retensi tahap sebelumnya tidak ditambahkan lagi.</div>
+                        </div>
+                    </div>
                     <div class="modal-body">
                         <div class="form-group row">
                             <label class="col-sm-3 col-form-label">Tgl Pencairan</label>
@@ -247,13 +278,13 @@
                                         <span class="input-group-text">Rp.</span>
                                     </div>
                                     <input name="jumlah_plafon" id="jumlah_plafon" class="form-control format-number"
-                                        type="text">
+                                        type="text" readonly>
                                 </div>
                             </div>
                         </div>
 
                         <div class="form-group row">
-                            <label class="col-sm-3 col-form-label">Jumlah Pencairan</label>
+                            <label class="col-sm-3 col-form-label">Pencairan Tahap Ini</label>
                             <div class="col-sm-4">
                                 <div class="input-group">
                                     <div class="input-group-prepend">
@@ -267,6 +298,7 @@
 
                         <hr>
                         <h6 class="font-weight-bold">Retensi</h6>
+                        <h6 class="font-weight-bold mt-3">Sisa Retensi Setelah Pencairan</h6>
                         @forelse ($retensis as $retensi)
                             <div class="form-group row retensi-row">
                                 <label class="col-sm-3 col-form-label">{{ $retensi->nama_retensi }}</label>
@@ -716,12 +748,28 @@
             hitungTotalRetensi();
         });
 
+        let ringkasanKpr = @json($ringkasanKpr);
+        function syncKprSummary(response) {
+            if (response.total_pencairan === undefined) return;
+            ringkasanKpr = response;
+            $('#kpr_total_cair').text(formatNumber(response.total_pencairan));
+            $('#kpr_sisa_plafon').text(formatNumber(response.sisa_plafon));
+        }
+
         $('#btnPencairanKpr').on('click', function() {
-            let estimasiPlafon = unformatNumber($('#estimasi_plafon').val());
+            if (!@json((bool) $akadSelesai)) {
+                toastr.warning('Customer harus hadir/selesai akad terlebih dahulu.');
+                return;
+            }
+            if (ringkasanKpr.sisa_plafon <= 0) {
+                toastr.warning('Seluruh plafon SP3K sudah dicairkan.');
+                return;
+            }
+            let estimasiPlafon = unformatNumber($('#plafon_sp3k').val());
 
             if (!estimasiPlafon || estimasiPlafon <= 0) {
                 audio.play();
-                toastr.warning("Estimasi plafon harus diisi terlebih dahulu sebelum proses pencairan KPR.", "PERHATIAN", {
+                toastr.warning("Plafon SP3K belum tersedia. Isi SP3K terlebih dahulu melalui menu Proses Bank / SP3K.", "PERHATIAN", {
                     progressBar: true,
                     timeOut: 3500,
                     positionClass: "toast-bottom-right",
@@ -732,6 +780,9 @@
             $('#jumlah_plafon').val(formatNumber(estimasiPlafon));
             $('#jumlah_pencairan').val('');
             $('.retensi-input').val('0');
+            $('.retensi-input').each(function() {
+                $(this).val(formatNumber(ringkasanKpr.retensi_tersisa[$(this).data('retensi-id')] || 0));
+            });
             hitungTotalRetensi();
             $('#modalPencairanKpr').modal('show');
         });
@@ -818,139 +869,6 @@
             $(document).on('keypress', '.edit-nominal', function(e) {
                 if (e.which === 13) {
                     $(this).closest('.input-group').find('.save-nominal').click();
-                }
-            });
-        });
-
-        $('#estimasi_plafon').on('click', function() {
-            $(this).prop('readonly', false).focus().select();
-        });
-
-        $('#estimasi_plafon').on('keypress', function(e) {
-            if (e.which === 13) {
-                $(this).prop('readonly', true);
-                let raw = unformatNumber($(this).val());
-                $(this).val(formatNumber(raw));
-                $('#save-estimasi-plafon').click();
-            }
-        });
-
-        $('#estimasi_plafon').on('focusout', function() {
-            let raw = unformatNumber($(this).val());
-            $(this).val(formatNumber(raw));
-        });
-
-        $('#sbum').on('click', function() {
-            $(this).prop('readonly', false).focus().select();
-        });
-
-        $('#sbum').on('keypress', function(e) {
-            if (e.which === 13) {
-                $(this).prop('readonly', true);
-                let raw = unformatNumber($(this).val());
-                $(this).val(formatNumber(raw));
-                $('#save-sbum').click();
-            }
-        });
-
-        $('#sbum').on('focusout', function() {
-            let raw = unformatNumber($(this).val());
-            $(this).val(formatNumber(raw));
-        });
-
-        $('#save-estimasi-plafon').on('click', function() {
-            let btn = $(this);
-            let estimasiPlafon = unformatNumber($('#estimasi_plafon').val());
-            let id = '{{ $customer->id }}';
-            let url = '{{ route('Pembayaran.update-estimasi-plafon', ['id' => ':id']) }}'.replace(':id', id);
-
-            if (isNaN(estimasiPlafon)) {
-                estimasiPlafon = 0;
-            }
-
-            btn.html('<i class="fa fa-spinner fa-spin"></i>');
-
-            $.ajax({
-                url: url,
-                method: 'PUT',
-                data: {
-                    _token: '{{ csrf_token() }}',
-                    estimasi_plafon: estimasiPlafon,
-                },
-                success: function(response) {
-                    if (response.status === 'success') {
-                        audio.play();
-                        toastr.success("Estimasi Plafon berhasil diupdate!", "BERHASIL", {
-                            progressBar: true,
-                            timeOut: 3500,
-                            positionClass: "toast-bottom-right",
-                        });
-                        $('#estimasi_plafon').val(response.estimasi_plafon_formatted).prop('readonly', true);
-                        $('#total_tagihan_all').val(response.total_tagihan_formatted);
-                        $('#jumlah_bayar_all').val(response.jumlah_bayar_formatted);
-                        $('#sisa_bayar_all').val(response.sisa_bayar_formatted);
-                    }
-                },
-                error: function(xhr) {
-                    audio.play();
-                    let message = xhr.responseJSON?.message || "Gagal mengupdate estimasi plafon!";
-                    toastr.error(message, "GAGAL!", {
-                        progressBar: true,
-                        timeOut: 3500,
-                        positionClass: "toast-bottom-right",
-                    });
-                },
-                complete: function() {
-                    btn.html('<i class="fa fa-check"></i>');
-                }
-            });
-        });
-
-        $('#save-sbum').on('click', function() {
-            let btn = $(this);
-            let sbum = unformatNumber($('#sbum').val());
-            let id = '{{ $customer->id }}';
-            let url = '{{ route('Pembayaran.update-sbum', ['id' => ':id']) }}'.replace(':id', id);
-
-            if (isNaN(sbum)) {
-                sbum = 0;
-            }
-
-            btn.html('<i class="fa fa-spinner fa-spin"></i>');
-
-            $.ajax({
-                url: url,
-                method: 'PUT',
-                data: {
-                    _token: '{{ csrf_token() }}',
-                    sbum: sbum,
-                },
-                success: function(response) {
-                    if (response.status === 'success') {
-                        audio.play();
-                        toastr.success("DP ke Bank berhasil diupdate!", "BERHASIL", {
-                            progressBar: true,
-                            timeOut: 3500,
-                            positionClass: "toast-bottom-right",
-                        });
-
-                        $('#sbum').val(response.sbum_formatted).prop('readonly', true);
-                        $('#total_tagihan_all').val(response.total_tagihan_formatted);
-                        $('#jumlah_bayar_all').val(response.jumlah_bayar_formatted);
-                        $('#sisa_bayar_all').val(response.sisa_bayar_formatted);
-                    }
-                },
-                error: function(xhr) {
-                    audio.play();
-                    let message = xhr.responseJSON?.message || "Gagal mengupdate DP ke Bank!";
-                    toastr.error(message, "GAGAL!", {
-                        progressBar: true,
-                        timeOut: 3500,
-                        positionClass: "toast-bottom-right",
-                    });
-                },
-                complete: function() {
-                    btn.html('<i class="fa fa-check"></i>');
                 }
             });
         });
@@ -1298,10 +1216,10 @@
         $('#formPencairanKpr').on('submit', function(e) {
             e.preventDefault();
 
-            let estimasiPlafon = unformatNumber($('#estimasi_plafon').val());
+            let estimasiPlafon = unformatNumber($('#plafon_sp3k').val());
             if (!estimasiPlafon || estimasiPlafon <= 0) {
                 audio.play();
-                toastr.warning("Estimasi plafon harus diisi terlebih dahulu sebelum proses pencairan KPR.", "PERHATIAN", {
+                toastr.warning("Plafon SP3K belum tersedia. Isi SP3K terlebih dahulu melalui menu Proses Bank / SP3K.", "PERHATIAN", {
                     progressBar: true,
                     timeOut: 3500,
                     positionClass: "toast-bottom-right",
@@ -1313,9 +1231,13 @@
             let jumlahPencairan = unformatNumber($('#jumlah_pencairan').val());
             let totalRetensi = hitungTotalRetensi();
 
-            if (jumlahPlafon !== (jumlahPencairan + totalRetensi)) {
+            if (jumlahPencairan <= 0 || jumlahPencairan > ringkasanKpr.sisa_plafon) {
+                toastr.error('Pencairan harus lebih dari nol dan tidak boleh melebihi sisa plafon SP3K.');
+                return;
+            }
+            if (jumlahPlafon !== (Number(ringkasanKpr.total_pencairan) + jumlahPencairan + totalRetensi)) {
                 audio.play();
-                toastr.error("Jumlah plafon harus sama dengan jumlah pencairan ditambah total retensi.", "GAGAL!", {
+                toastr.error("Pencairan sebelumnya + tahap ini + sisa retensi harus sama dengan plafon SP3K.", "GAGAL!", {
                     progressBar: true,
                     timeOut: 3500,
                     positionClass: "toast-bottom-right",
@@ -1355,6 +1277,7 @@
                             positionClass: "toast-bottom-right",
                         });
 
+                        syncKprSummary(response);
                         $('#jumlah_bayar_all').val(response.jumlah_bayar);
                         $('#total_tagihan_all').val(response.total_tagihan);
                         $('#sisa_bayar_all').val(response.sisa_bayar);
@@ -1441,6 +1364,7 @@
                             positionClass: "toast-bottom-right",
                         });
 
+                        syncKprSummary(response);
                         $('#jumlah_bayar_all').val(response.jumlah_bayar);
                         $('#total_tagihan_all').val(response.total_tagihan);
                         recalcSisaBayar();
@@ -1526,7 +1450,8 @@
 
                                 $('.table-pemasukan').DataTable().ajax.reload(null,
                                     false);
-                                $('#jumlah_bayar_all').val(response.jumlah_bayar);
+                                syncKprSummary(response);
+                        $('#jumlah_bayar_all').val(response.jumlah_bayar);
                                 $('#total_tagihan_all').val(response.total_tagihan);
                                 recalcSisaBayar();
 

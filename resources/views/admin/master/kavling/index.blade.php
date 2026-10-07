@@ -112,43 +112,20 @@
                         </div>
 
                         <div class="form-group row">
-                            <label class="col-sm-3 col-form-label">Panjang Kanan</label>
+                            <label class="col-sm-3 col-form-label">Panjang</label>
                             <div class="col-sm-3">
                                 <div class="input-group">
-                                    <input type="text" name="panjang_kanan" id="panjang_kanan"
+                                    <input type="text" name="panjang" id="panjang"
                                         class="form-control format-decimal">
                                     <div class="input-group-append">
                                         <span class="input-group-text">m</span>
                                     </div>
                                 </div>
                             </div>
-                            <label class="col-sm-2 col-form-label">Panjang Kiri</label>
+                            <label class="col-sm-2 col-form-label">Lebar</label>
                             <div class="col-sm-3">
                                 <div class="input-group">
-                                    <input type="text" name="panjang_kiri" id="panjang_kiri"
-                                        class="form-control format-decimal">
-                                    <div class="input-group-append">
-                                        <span class="input-group-text">m</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="form-group row">
-                            <label class="col-sm-3 col-form-label">Lebar Depan</label>
-                            <div class="col-sm-3">
-                                <div class="input-group">
-                                    <input type="text" name="lebar_depan" id="lebar_depan"
-                                        class="form-control format-decimal">
-                                    <div class="input-group-append">
-                                        <span class="input-group-text">m</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <label class="col-sm-2 col-form-label">Lebar Belakang</label>
-                            <div class="col-sm-3">
-                                <div class="input-group">
-                                    <input type="text" name="lebar_belakang" id="lebar_belakang"
+                                    <input type="text" name="lebar" id="lebar"
                                         class="form-control format-decimal">
                                     <div class="input-group-append">
                                         <span class="input-group-text">m</span>
@@ -647,10 +624,8 @@
                     $('#primary_id').val(data.id);
                     $('#nama_kavling').val(data.lokasi.nama_kavling);
                     $('#kode_kavling').val(data.kode_kavling);
-                    $('#panjang_kanan').val(data.panjang_kanan);
-                    $('#panjang_kiri').val(data.panjang_kiri);
-                    $('#lebar_depan').val(data.lebar_depan);
-                    $('#lebar_belakang').val(data.lebar_belakang);
+                    $('#panjang').val(data.panjang);
+                    $('#lebar').val(data.lebar);
                     $('#luas_tanah').val(data.luas_tanah);
                     $('#luas_bangunan').val(data.luas_bangunan);
                     $('#daya_listrik').val(formatNumber(data.daya_listrik));

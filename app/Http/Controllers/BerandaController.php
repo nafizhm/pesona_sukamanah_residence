@@ -24,6 +24,14 @@ class BerandaController extends Controller
     public function index(Request $request)
     {
         $username = Auth::user()->username;
+        $request->validate(['tahun' => 'nullable|integer|min:2000|max:2100']);
+        $chartYear = (int) ($request->input('tahun') ?: Carbon::now('Asia/Jakarta')->year);
+        $monthlySales = app(\App\Services\MonthlySalesService::class)->forYear($chartYear);
+        $chartMax = max(1, ...array_merge(array_column($monthlySales, 'booking'), array_column($monthlySales, 'akad')));
+        $chartYears = collect([Carbon::now('Asia/Jakarta')->year, $chartYear])
+            ->merge(PengajuanHold::whereNotNull('tgl_booking')->pluck('tgl_booking')->map(fn ($date) => (int) substr($date, 0, 4)))
+            ->merge(Akad::whereNotNull('tgl_akad')->pluck('tgl_akad')->map(fn ($date) => (int) substr($date, 0, 4)))
+            ->filter(fn ($year) => $year >= 2000 && $year <= 2100)->unique()->sortDesc()->values();
 
         $pipelineCounts = [
             'booking' => PengajuanHold::where('stt_reg', '!=', 2)->count(),
@@ -124,6 +132,10 @@ class BerandaController extends Controller
 
         return view('admin.beranda.index', compact(
             'username',
+            'chartYear',
+            'monthlySales',
+            'chartMax',
+            'chartYears',
             'pipelineCounts',
             'summaryMetrics',
             'projectStats',

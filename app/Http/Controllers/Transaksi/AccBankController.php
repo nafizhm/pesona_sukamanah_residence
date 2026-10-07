@@ -30,7 +30,6 @@ class AccBankController extends Controller
                 'wawancara.customer.kavling',
                 'bankKPR'
             )
-                ->where('status', 1)
                 ->whereHas('wawancara.customer', function ($q) {
                     $q->where('stt_arsip', 0);
                 })
@@ -60,6 +59,7 @@ class AccBankController extends Controller
                         <span>' . number_format($row->acc_plafon, 0, ',', '.') . '</span>
                     </div>';
                 })
+                ->addColumn('dp_nilai', fn ($row) => $row->dp_nilai === null ? '-' : number_format($row->dp_nilai, 0, ',', '.'))
                 ->editColumn('tgl_terbit_sp3k', function ($row) {
                     return $row->tgl_terbit_sp3k ? Carbon::parse($row->tgl_terbit_sp3k)->translatedFormat('d F Y') : '-';
                 })
@@ -93,6 +93,7 @@ class AccBankController extends Controller
                     $btn = '<div class="d-flex justify-content-center">';
                     if ($permissions['edit']) {
                         $btn .= '<a href="' . e($editUrl) . '" class="btn btn-primary btn-sm mx-1">Detail</a>';
+                        $btn .= '<a href="' . e(route('acc-bank.edit', $row->id)) . '" class="btn btn-info btn-sm mx-1">Edit</a>';
                     }
 
                     if ($permissions['hapus']) {
@@ -119,6 +120,10 @@ class AccBankController extends Controller
 
             return DataTables::of($data)
                 ->addIndexColumn()
+                ->addColumn('dp_nilai', fn ($row) => $row->dp_nilai === null ? '-' : number_format($row->dp_nilai, 0, ',', '.'))
+                ->addColumn('action', function ($row) {
+                    return $this->canEditSp3k() ? '<a class="btn btn-info btn-sm" href="' . e(route('acc-bank.edit', $row->id)) . '">Edit</a>' : '-';
+                })
                 ->addColumn('bankKPR', function ($row) {
                     return optional($row->bankKPR)->nama ?? '-';
                 })
@@ -155,11 +160,72 @@ class AccBankController extends Controller
 
                     return '-';
                 })
-                ->rawColumns(['acc_plafon', 'sisa_hari'])
+                ->rawColumns(['acc_plafon', 'sisa_hari', 'action'])
                 ->make(true);
         }
 
         return view('admin.transaksi.acc_bank.detail', compact('data'));
+    }
+
+    private function canEditSp3k(): bool
+    {
+        return DB::table('hak_akses')->join('menu', 'menu.id', '=', 'hak_akses.id_menu')
+            ->where('hak_akses.id_user', \Illuminate\Support\Facades\Auth::id())
+            ->where('menu.route_name', 'acc-bank.index')->where('hak_akses.lihat', 1)->where('hak_akses.edit', 1)->exists();
+    }
+
+    private function authorizeSp3kEdit(): void
+    {
+        abort_unless($this->canEditSp3k(), 403, 'Anda tidak memiliki akses edit SP3K.');
+    }
+
+    public function edit($id)
+    {
+        $this->authorizeSp3kEdit();
+        $sp3k = WawancaraSp3k::with('wawancara.customer')->findOrFail($id);
+        $banks = \App\Models\BankKPR::orderBy('nama')->get();
+        $notarisList = \App\Models\Notaris::orderBy('nama_notaris')->get();
+        return view('admin.transaksi.acc_bank.edit', compact('sp3k', 'banks', 'notarisList'));
+    }
+
+    public function update(Request $request, $id)
+    {
+        $this->authorizeSp3kEdit();
+        $sp3k = WawancaraSp3k::findOrFail($id);
+        $request->validate([
+            'acc_plafon' => 'required', 'tenor' => 'required|integer|min:1',
+            'tgl_terbit_sp3k' => 'required|date', 'no_sp3k' => 'required|string|max:255',
+            'id_bank_kpr' => 'required|exists:bank_kpr,id', 'id_notaris' => 'required|exists:notaris,id',
+            'catatan_acc' => 'nullable|string', 'lampiran' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048',
+        ]);
+        $dp = app(\App\Services\Sp3kDpService::class)->calculate($request);
+        $issued = Carbon::parse($request->tgl_terbit_sp3k)->startOfDay();
+        $expires = $issued->copy()->addDays(90);
+        $values = [
+            ...$dp, 'acc_plafon' => (int) str_replace('.', '', $request->acc_plafon),
+            'tenor' => $request->tenor, 'tgl_terbit_sp3k' => $issued, 'tgl_expired' => $expires,
+            'no_sp3k' => $request->no_sp3k, 'id_bank_kpr' => $request->id_bank_kpr,
+            'id_notaris' => $request->id_notaris, 'catatan_acc' => $request->catatan_acc ?? '',
+            'status' => $expires->lt(Carbon::today('Asia/Jakarta')) ? 2 : 1,
+        ];
+        $filename = null;
+        if ($request->hasFile('lampiran')) {
+            $file = $request->file('lampiran');
+            $filename = \Illuminate\Support\Str::random(25) . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('assets/SP3K'), $filename);
+            $values['lampiran'] = $filename;
+        }
+        try {
+            DB::transaction(function () use ($sp3k, $values) {
+                $sp3k->update($values);
+                $this->logEdit('SP3K', $sp3k->id);
+            });
+        } catch (\Throwable $e) {
+            if ($filename && is_file(public_path('assets/SP3K/' . $filename))) unlink(public_path('assets/SP3K/' . $filename));
+            throw $e;
+        }
+        if ($request->expectsJson()) return response()->json(['success' => true]);
+        return redirect()->route('acc-bank.edit', $sp3k->id)->with('success', 'SP3K berhasil diperbarui.');
     }
 
     public function destroy($id)

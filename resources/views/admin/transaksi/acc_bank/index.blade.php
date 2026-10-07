@@ -15,7 +15,7 @@
                         <div class="card">
                             <div class="card-header p-3">
                                 <div class="d-flex align-content-center justify-content-between">
-                                    <h3 class="font-weight-bold text-lg">Data Acc Bank</h3>
+                                    <h3 class="font-weight-bold text-lg">Data SP3K</h3>
                                 </div>
                             </div>
                             <div class="card-body">
@@ -28,6 +28,7 @@
                                             <th>Bank KPR</th>
                                             <th>Harga Jual</th>
                                             <th>ACC Plafon</th>
+                                            <th>DP ke Bank</th>
                                             <th>Tgl SP3K</th>
                                             <th>Tgl Expired</th>
                                             <th>Sisa Hari</th>
@@ -93,6 +94,9 @@
                         name: 'acc_plafon',
                         orderable: false,
                         searchable: false
+                    },
+                    {
+                        data: 'dp_nilai', name: 'dp_nilai', orderable: false, searchable: false
                     },
                     {
                         data: 'tgl_terbit_sp3k',

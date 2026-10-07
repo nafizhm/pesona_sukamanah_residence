@@ -178,8 +178,6 @@ Route::middleware(['auth'])->group(function () {
         Route::get('pembayaran/detail-tagihan/{id}', 'detailTagihan')->name('pembayaran.detail-tagihan');
         Route::get('pembayaran/detail-pemasukan/{id}', 'detailPemasukan')->name('pembayaran.detail-pemasukan');
         Route::put('pembayaran/update-harga-rumah/{id}', 'UpdateHargaRumah')->name('Pembayaran.update-harga-rumah');
-        Route::put('pembayaran/update-estimasi-plafon/{id}', 'updateEstimasiPlafon')->name('Pembayaran.update-estimasi-plafon');
-        Route::put('pembayaran/update-sbum/{id}', 'updateSbum')->name('Pembayaran.update-sbum');
 
         Route::get('Pembayaran/rekap-pembayaran', 'rekapPembayaran')->name('pembayaran.rekap');
 

@@ -312,14 +312,12 @@ class DashboardController extends Controller
                 ->addIndexColumn()
                 ->addColumn('panjang', function ($row) {
                     return '
-                        <p>pjg kanan: <strong>' . $row->panjang_kanan . ' m</strong></p>
-                        <p>pjg kiri: <strong>' . $row->panjang_kiri . ' m</strong></p>
+                        <p>Panjang: <strong>' . $row->panjang . ' m</strong></p>
                     ';
                 })
                 ->addColumn('lebar', function ($row) {
                     return '
-                        <p>lebar depan: <strong>' . $row->lebar_depan . ' m</strong></p>
-                        <p>lebar belakang: <strong>' . $row->lebar_belakang . ' m</strong></p>
+                        <p>Lebar: <strong>' . $row->lebar . ' m</strong></p>
                     ';
                 })
                 ->addColumn('luas', function ($row) {

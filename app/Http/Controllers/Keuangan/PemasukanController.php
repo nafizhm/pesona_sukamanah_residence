@@ -152,13 +152,15 @@ class PemasukanController extends Controller
 
     public function store(Request $request)
     {
+        abort_if(KategoriTransaksi::where('kategori', 'Pencairan KPR')->whereKey($request->id_kategori_transaksi)->exists(),
+            422, 'Input pencairan KPR melalui detail pembayaran agar akad dan batas plafon diperiksa.');
         $request->validate([
             'tanggal'               => 'required|date',
             'nominal'               => 'required',
             'id_bank'               => 'required',
             'lampiran'              => 'required|file|mimes:jpg,jpeg,png,pdf|max:2048',
             'id_kategori_transaksi' => 'required',
-            'id_piutang'            => 'required_if:id_kategori_transaksi,6',
+            'id_piutang'            => 'nullable|integer|min:1|exists:piutang,id',
         ], [
             'tanggal.required'               => 'Tanggal wajib diisi.',
             'tanggal.date'                   => 'Tanggal harus berupa tanggal.',
@@ -212,33 +214,13 @@ class PemasukanController extends Controller
         $pk = Pemasukan::create($db);
         $this->logCreate('Pemasukan', $pk->id);
 
-        if (! empty($request->id_piutang)) {
-            $piutang = Piutang::find($request->id_piutang);
-
-            if ($piutang) {
-                $nominalBayar  = $piutang->terbayar + str_replace('.', '', $request->nominal);
-                $sisaBayarBaru = $piutang->sisa_bayar - str_replace('.', '', $request->nominal);
-
-                $updateData = [
-                    'terbayar'   => $nominalBayar,
-                    'sisa_bayar' => $sisaBayarBaru,
-                ];
-
-                if ($sisaBayarBaru == 0) {
-                    $updateData['status']        = 2;
-                    $updateData['tgl_pelunasan'] = Carbon::now();
-                }
-
-                $piutang->update($updateData);
-            }
-        }
-
         return response()->json(['status' => 'success']);
     }
 
     public function update(Request $request, $id)
     {
         $data = Pemasukan::findOrFail($id);
+        abort_if($data->plafon_sp3k !== null, 422, 'Pencairan KPR dikelola melalui detail pembayaran.');
 
         $rules = [
             'tanggal' => 'required|date',
@@ -288,61 +270,9 @@ class PemasukanController extends Controller
             $db['lampiran'] = $filename;
         }
 
-        if ($data->id_kategori_transaksi == 6) {
-            if ($request->id_piutang != $data->id_piutang) {
-                $hutanglama = Piutang::find($data->id_piutang);
-                if ($hutanglama) {
-                    $hutanglama->update([
-                        'terbayar'      => $hutanglama->terbayar - $data->nominal,
-                        'sisa_bayar'    => $hutanglama->sisa_bayar + $data->nominal,
-                        'status'        => 1,
-                        'tgl_pelunasan' => null,
-                    ]);
-                }
-
-                $hutangbaru = Piutang::find($request->id_piutang);
-                if ($hutangbaru) {
-                    $nominalBayar  = str_replace('.', '', $request->nominal);
-                    $sisaBayarBaru = $hutangbaru->sisa_bayar - $nominalBayar;
-
-                    $updateData = [
-                        'terbayar'   => $nominalBayar,
-                        'sisa_bayar' => $sisaBayarBaru,
-                    ];
-
-                    if ($sisaBayarBaru == 0) {
-                        $updateData['status']        = 2;
-                        $updateData['tgl_pelunasan'] = Carbon::now();
-                    }
-
-                    $hutangbaru->update($updateData);
-                }
-            } else {
-                $hutanglama2 = Piutang::find($data->id_piutang);
-                if ($hutanglama2) {
-                    $hutanglama2->update([
-                        'terbayar'      => $hutanglama2->terbayar - $data->nominal,
-                        'sisa_bayar'    => $hutanglama2->sisa_bayar + $data->nominal,
-                        'status'        => 1,
-                        'tgl_pelunasan' => null,
-                    ]);
-
-                    $nominalBayar  = $hutanglama2->terbayar + str_replace('.', '', $request->nominal);
-                    $sisaBayarBaru = $hutanglama2->sisa_bayar - str_replace('.', '', $request->nominal);
-
-                    $updateData = [
-                        'terbayar'   => $nominalBayar,
-                        'sisa_bayar' => $sisaBayarBaru,
-                    ];
-
-                    if ($sisaBayarBaru == 0) {
-                        $updateData['status']        = 2;
-                        $updateData['tgl_pelunasan'] = Carbon::now();
-                    }
-
-                    $hutanglama2->update($updateData);
-                }
-            }
+        if ($request->has('id_piutang')) {
+            $request->validate(['id_piutang' => 'nullable|integer|min:1|exists:piutang,id']);
+            $db['id_piutang'] = $request->id_piutang ?? 0;
         }
 
         $data->update($db);
@@ -354,20 +284,9 @@ class PemasukanController extends Controller
     public function destroy($id)
     {
         $data = Pemasukan::findOrFail($id);
+        abort_if($data->plafon_sp3k !== null, 422, 'Pencairan KPR dikelola melalui detail pembayaran.');
         if (! empty($data->lampiran) && file_exists(public_path('assets/keuangan/pemasukan/' . $data->lampiran))) {
             unlink(public_path('assets/keuangan/pemasukan/' . $data->lampiran));
-        }
-
-        if ($data->id_piutang != 0) {
-            $hutanglama = Piutang::find($data->id_piutang);
-            if ($hutanglama) {
-                $hutanglama->update([
-                    'terbayar'      => $hutanglama->terbayar - $data->nominal,
-                    'sisa_bayar'    => $hutanglama->sisa_bayar + $data->nominal,
-                    'status'        => 1,
-                    'tgl_pelunasan' => null,
-                ]);
-            }
         }
 
         $this->logDelete('Pemasukan', $data->id);

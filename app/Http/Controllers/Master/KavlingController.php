@@ -8,6 +8,7 @@ use App\Models\KavlingPeta;
 use App\Models\LokasiKavling;
 use App\Models\KomponenBiaya;
 use App\Models\Piutang;
+use App\Services\KavlingCostNames;
 use App\Traits\LogAktivitasTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,14 +38,12 @@ class KavlingController extends Controller
                 ->addIndexColumn()
                 ->addColumn('panjang', function ($row) {
                     return '
-                <p>Pjg Kanan : <strong>' . $row->panjang_kanan . ' m</strong></p>
-                <p>Pjg Kiri : <strong>' . $row->panjang_kiri . ' m</strong></p>
+                <strong>' . e($row->panjang) . ' m</strong>
             ';
                 })
                 ->addColumn('lebar', function ($row) {
                     return '
-                <p>Lebar Depan: <strong>' . $row->lebar_depan . ' m</strong></p>
-                <p>Lebar Belakang: <strong>' . $row->lebar_belakang . ' m</strong></p>
+                <strong>' . e($row->lebar) . ' m</strong>
             ';
                 })
                 ->addColumn('luas', function ($row) {
@@ -114,20 +113,16 @@ class KavlingController extends Controller
         $data = KavlingPeta::findOrFail($id);
 
         $rules = [
-            'panjang_kanan'  => 'required',
-            'panjang_kiri'   => 'required',
-            'lebar_depan'    => 'required',
-            'lebar_belakang' => 'required',
+            'panjang'       => 'required|numeric|min:0',
+            'lebar'         => 'required|numeric|min:0',
             'luas_tanah'     => 'required',
             'luas_bangunan'  => 'required',
             'rincian_biaya'  => 'nullable|array',
         ];
 
         $messages = [
-            'panjang_kanan.required'  => 'Panjang kanan wajib diisi.',
-            'panjang_kiri.required'   => 'Panjang kiri wajib diisi.',
-            'lebar_depan.required'    => 'Lebar depan wajib diisi.',
-            'lebar_belakang.required' => 'Lebar belakang wajib diisi.',
+            'panjang.required' => 'Panjang wajib diisi.',
+            'lebar.required'   => 'Lebar wajib diisi.',
             'luas_tanah.required'     => 'Luas tanah wajib diisi.',
             'luas_bangunan.required'  => 'Luas bangunan wajib diisi.',
         ];
@@ -141,7 +136,7 @@ class KavlingController extends Controller
             $rincian = [];
 
             foreach ($rincianRaw as $item) {
-                $nama  = trim($item['nama'] ?? '');
+                $nama  = KavlingCostNames::canonical($item['nama'] ?? '');
                 $nilai = (int) str_replace('.', '', $item['nilai'] ?? 0);
                 if ($nama === '') continue;
 
@@ -156,7 +151,7 @@ class KavlingController extends Controller
 
             // Auto-sync rincian_biaya ke komponen_biaya
             $existingKode = KomponenBiaya::pluck('kode_unik');
-            $existingNama = KomponenBiaya::pluck('nama');
+            $existingNama = collect(KavlingCostNames::uniqueNames(KomponenBiaya::pluck('nama')));
             $maxUrutan    = KomponenBiaya::max('urutan') ?? 0;
             foreach ($rincian as $item) {
                 $nama = $item['nama'];
@@ -194,10 +189,8 @@ class KavlingController extends Controller
             ], $rincian);
 
             $db = [
-                'panjang_kanan'     => $request->panjang_kanan,
-                'panjang_kiri'      => $request->panjang_kiri,
-                'lebar_depan'       => $request->lebar_depan,
-                'lebar_belakang'    => $request->lebar_belakang,
+                'panjang'     => $request->panjang,
+                'lebar'       => $request->lebar,
                 'luas_tanah'        => $request->luas_tanah,
                 'luas_bangunan'     => $request->luas_bangunan,
                 'hrg_jual'          => $hrgJualBaru,
@@ -403,11 +396,11 @@ class KavlingController extends Controller
             $x = $pdf->GetX();
             $y = $pdf->GetY();
             $pdf->MultiCell(55, 10,
-                "Kanan: {$row->panjang_kanan} m\nKiri: {$row->panjang_kiri} m",
+                "{$row->panjang} m",
                 1, 'L', false, 0, '', '', true, 0, false, true, 10, 'M'
             );
             $pdf->MultiCell(55, 10,
-                "Depan: {$row->lebar_depan} m\nBelakang: {$row->lebar_belakang} m",
+                "{$row->lebar} m",
                 1, 'L', false, 0, '', '', true, 0, false, true, 10, 'M'
             );
             $pdf->MultiCell(55, 10,
@@ -433,9 +426,9 @@ class KavlingController extends Controller
 
         // Ambil komponen biaya aktif sebagai referensi kolom dinamis
         $komponenBiaya = KomponenBiaya::aktif()->urut()->get();
-        $namaBiayaList = $komponenBiaya->pluck('nama')->toArray();
+        $namaBiayaList = KavlingCostNames::uniqueNames($komponenBiaya->pluck('nama'));
 
-        $staticCols = 6; // No, Perumahan, Kode Kavling, Panjang, Lebar, Luas
+        $staticCols = 7; // No, Perumahan, Kode Kavling, Panjang, Lebar, Luas
         $totalCols = $staticCols + count($namaBiayaList) + 1; // +1 untuk Total Harga
         $lastColLetter = Coordinate::stringFromColumnIndex($totalCols);
 
@@ -449,7 +442,7 @@ class KavlingController extends Controller
         } else {
             $lokasiNama = 'Semua Lokasi';
         }
-        $sheet->setTitle('Data Kavling ' . $lokasiNama);
+        $sheet->setTitle('Data Kavling');
 
         // ── Baris 1: Judul ──────────────────────────────────────
         $sheet->setCellValue('A1', 'Data Kavling');
@@ -457,7 +450,7 @@ class KavlingController extends Controller
 
         // ── Baris 2: Header Kolom ───────────────────────────────
         $headers = array_merge(
-            ['No', 'Perumahan', 'Kode Kavling', 'Panjang', 'Lebar', 'Luas'],
+            ['No', 'Perumahan', 'Kode Kavling', 'Panjang', 'Lebar', 'Luas Tanah', 'Luas Bangunan'],
             $namaBiayaList,
             ['Total Harga']
         );
@@ -481,23 +474,15 @@ class KavlingController extends Controller
             $sheet->setCellValue("B{$rowNum}", $namaLokasi);
             $sheet->setCellValue("C{$rowNum}", $row->kode_kavling ?? '-');
 
-            // Kolom D: Panjang (multi-line, format lama)
-            $sheet->setCellValue("D{$rowNum}",
-                "Kanan: {$row->panjang_kanan} m\nKiri: {$row->panjang_kiri} m");
-            // Kolom E: Lebar (multi-line)
-            $sheet->setCellValue("E{$rowNum}",
-                "Depan: {$row->lebar_depan} m\nBelakang: {$row->lebar_belakang} m");
-            // Kolom F: Luas (multi-line)
-            $sheet->setCellValue("F{$rowNum}",
-                "Tanah: {$row->luas_tanah} m²\nBangunan: {$row->luas_bangunan} m²");
+            foreach (['D' => 'panjang', 'E' => 'lebar', 'F' => 'luas_tanah', 'G' => 'luas_bangunan'] as $column => $field) {
+                $sheet->setCellValue($column . $rowNum, (float) ($row->$field ?? 0));
+                $sheet->getStyle($column . $rowNum)->getNumberFormat()->setFormatCode('General');
+            }
+            $sheet->getStyle("A{$rowNum}:G{$rowNum}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
-            $sheet->getStyle("D{$rowNum}:F{$rowNum}")->getAlignment()->setWrapText(true);
-            $sheet->getStyle("A{$rowNum}:F{$rowNum}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+            $rincian = collect(KavlingCostNames::mergeValues($row->rincian_biaya ?? []))->keyBy('nama');
 
-            // ── Kolom Komponen Biaya Dinamis ────────────────────
-            $rincian = collect($row->rincian_biaya ?? [])->keyBy('nama');
-
-            $firstColNum = 7;
+            $firstColNum = 8;
             $colNum = $firstColNum;
             foreach ($namaBiayaList as $nama) {
                 $nilai = (int) ($rincian->get($nama)['nilai'] ?? 0);
@@ -513,7 +498,7 @@ class KavlingController extends Controller
             $lastCol = Coordinate::stringFromColumnIndex($colNum - 1);
             $totalCol = Coordinate::stringFromColumnIndex($colNum);
             $sheet->setCellValue($totalCol . $rowNum,
-                "=SUM({$firstCol}{$rowNum}:{$lastCol}{$rowNum})");
+                count($namaBiayaList) ? "=SUM({$firstCol}{$rowNum}:{$lastCol}{$rowNum})" : 0);
             $sheet->getStyle($totalCol . $rowNum)
                 ->getNumberFormat()->setFormatCode('#,##0');
 
@@ -537,13 +522,10 @@ class KavlingController extends Controller
 
         // ── Output ──────────────────────────────────────────────
         $fileName = 'data_kavling.xlsx';
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header("Content-Disposition: attachment; filename=\"{$fileName}\"");
-        header('Cache-Control: max-age=0');
-
         $writer = new Xlsx($spreadsheet);
-        $writer->save('php://output');
-        exit;
+        return response()->streamDownload(fn () => $writer->save('php://output'), $fileName, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
     }
 
     public function importExcel(Request $request)
@@ -563,26 +545,20 @@ class KavlingController extends Controller
             return back()->withErrors(['msg' => 'File Excel kosong.']);
         }
 
-        // ── Deteksi format berdasarkan data (bukan header) ──────────────
-        $isNewFormat = false;
-        foreach ($rows as $row) {
-            $val = $row[3] ?? null;
-            if ($val !== null && $val !== '') {
-                $isNewFormat = is_numeric($val);
-                break;
-            }
-        }
-        $biayaStartIdx = $isNewFormat ? 9 : 6;
+        // Legacy numeric spreadsheets have four side columns; simplified exports have two dimensions.
+        $isNewFormat = trim((string) ($headers[3] ?? '')) === 'Pjg Kanan (m)';
+        $isSeparatedFormat = trim((string) ($headers[5] ?? '')) === 'Luas Tanah';
+        $biayaStartIdx = $isNewFormat ? 9 : ($isSeparatedFormat ? 7 : 6);
 
         $totalCols = count($headers);
         $colMap = [];
         $staticHeaderNames = [
             'No', 'Perumahan', 'Kode Kavling', 'Panjang', 'Lebar', 'Luas',
             'Pjg Kanan (m)', 'Pjg Kiri (m)', 'Lb Depan (m)', 'Lb Belakang (m)',
-            'Luas Tanah (m2)', 'Luas Bangunan (m2)', 'Total Harga',
+            'Luas Tanah', 'Luas Bangunan', 'Luas Tanah (m2)', 'Luas Bangunan (m2)', 'Total Harga',
         ];
         for ($i = $biayaStartIdx; $i < $totalCols - 1; $i++) {
-            $nama = trim($headers[$i] ?? '');
+            $nama = KavlingCostNames::canonical($headers[$i] ?? '');
             if ($nama !== '' && !in_array($nama, $staticHeaderNames)) {
                 $colMap[$i] = $nama;
             }
@@ -590,7 +566,7 @@ class KavlingController extends Controller
 
         // Auto-sync header biaya ke komponen_biaya
         $existingKode = KomponenBiaya::pluck('kode_unik');
-        $existingNama = KomponenBiaya::pluck('nama');
+        $existingNama = collect(KavlingCostNames::uniqueNames(KomponenBiaya::pluck('nama')));
         $maxUrutan    = KomponenBiaya::max('urutan') ?? 0;
         foreach ($colMap as $nama) {
             if (!$existingNama->contains($nama)) {
@@ -647,28 +623,40 @@ class KavlingController extends Controller
 
                 // ── Parse Dimensi (berdasarkan record pertama untuk fallback) ─
                 $first = $kavlings->first();
-                if ($isNewFormat) {
-                    $panjangKanan  = (isset($row[3]) && is_numeric($row[3]) && $row[3] >= 0) ? (float) $row[3] : $first->panjang_kanan;
-                    $panjangKiri   = (isset($row[4]) && is_numeric($row[4]) && $row[4] >= 0) ? (float) $row[4] : $first->panjang_kiri;
-                    $lebarDepan    = (isset($row[5]) && is_numeric($row[5]) && $row[5] >= 0) ? (float) $row[5] : $first->lebar_depan;
-                    $lebarBelakang = (isset($row[6]) && is_numeric($row[6]) && $row[6] >= 0) ? (float) $row[6] : $first->lebar_belakang;
+                if ($isSeparatedFormat) {
+                    $dimensions = [];
+                    foreach ([3 => 'panjang', 4 => 'lebar', 5 => 'luas_tanah', 6 => 'luas_bangunan'] as $column => $field) {
+                        $value = $row[$column] ?? null;
+                        if ($value === null || $value === '') $value = $first->$field;
+                        if (!is_numeric($value) || $value < 0) throw new \RuntimeException('Baris ' . ($rowIndex + 3) . ': ukuran harus angka tanpa satuan dan tidak negatif.');
+                        $dimensions[$field] = (float) $value;
+                    }
+                    $panjangKanan = $dimensions['panjang'];
+                    $lebarDepan = $dimensions['lebar'];
+                    $luasTanah = $dimensions['luas_tanah'];
+                    $luasBangunan = $dimensions['luas_bangunan'];
+                } elseif ($isNewFormat) {
+                    $panjangKanan  = (isset($row[3]) && is_numeric($row[3]) && $row[3] >= 0) ? (float) $row[3] : $first->panjang;
+                    $lebarDepan    = (isset($row[5]) && is_numeric($row[5]) && $row[5] >= 0) ? (float) $row[5] : $first->lebar;
                     $luasTanah     = (isset($row[7]) && is_numeric($row[7]) && $row[7] >= 0) ? (float) $row[7] : $first->luas_tanah;
                     $luasBangunan  = (isset($row[8]) && is_numeric($row[8]) && $row[8] >= 0) ? (float) $row[8] : $first->luas_bangunan;
                 } else {
-                    $panjangKanan  = $first->panjang_kanan;
-                    $panjangKiri   = $first->panjang_kiri;
-                    $lebarDepan    = $first->lebar_depan;
-                    $lebarBelakang = $first->lebar_belakang;
+                    $panjangKanan  = $first->panjang;
+                    $lebarDepan    = $first->lebar;
                     $luasTanah     = $first->luas_tanah;
                     $luasBangunan  = $first->luas_bangunan;
 
                     $panjangStr = trim((string) ($row[3] ?? ''));
+                    if (preg_match('/^([\d]+(?:[.,][\d]+)?)\s*(?:m)?$/i', $panjangStr, $m)) {
+                        $panjangKanan = (float) str_replace(',', '.', $m[1]);
+                    }
                     if ($panjangStr && preg_match('/Kanan:\s*([\d,.]+)\s*m/i', $panjangStr, $m)) $panjangKanan = (float) str_replace(',', '.', $m[1]);
-                    if ($panjangStr && preg_match('/Kiri:\s*([\d,.]+)\s*m/i',  $panjangStr, $m)) $panjangKiri  = (float) str_replace(',', '.', $m[1]);
 
                     $lebarStr = trim((string) ($row[4] ?? ''));
+                    if (preg_match('/^([\d]+(?:[.,][\d]+)?)\s*(?:m)?$/i', $lebarStr, $m)) {
+                        $lebarDepan = (float) str_replace(',', '.', $m[1]);
+                    }
                     if ($lebarStr && preg_match('/Depan:\s*([\d,.]+)\s*m/i',    $lebarStr, $m)) $lebarDepan    = (float) str_replace(',', '.', $m[1]);
-                    if ($lebarStr && preg_match('/Belakang:\s*([\d,.]+)\s*m/i', $lebarStr, $m)) $lebarBelakang = (float) str_replace(',', '.', $m[1]);
 
                     $luasStr = trim((string) ($row[5] ?? ''));
                     if ($luasStr && preg_match('/Tanah:\s*([\d,.]+)\s*m/i',    $luasStr, $m)) $luasTanah    = (float) str_replace(',', '.', $m[1]);
@@ -677,17 +665,19 @@ class KavlingController extends Controller
 
                 // ── Parse Rincian Biaya ────────────────────────────────
                 // Parse dulu dari Excel (sama untuk semua duplikat)
-                $biayaDariExcel = [];
+                $biayaItems = [];
                 foreach ($colMap as $colIdx => $nama) {
                     $raw   = $row[$colIdx] ?? 0;
-                    $nilai = (int) str_replace(['.', ',', ' '], '', (string) $raw);
-                    $biayaDariExcel[$nama] = $nilai;
+                    $nilai = is_numeric($raw) ? (int) round((float) $raw) : (int) str_replace(['.', ',', ' '], '', (string) $raw);
+                    $biayaItems[] = ['nama' => $nama, 'nilai' => $nilai];
                 }
+
+                $biayaDariExcel = collect(KavlingCostNames::mergeValues($biayaItems))->pluck('nilai', 'nama');
 
                 // Update SEMUA record dengan kode_kavling yg sama
                 foreach ($kavlings as $kavling) {
                     $existing = $kavling->rincian_biaya ?? [];
-                    $merged   = collect($existing)->keyBy('nama');
+                    $merged   = collect(KavlingCostNames::mergeValues($existing))->keyBy('nama');
 
                     foreach ($biayaDariExcel as $nama => $nilai) {
                         $merged[$nama] = ['nama' => $nama, 'nilai' => $nilai];
@@ -712,10 +702,8 @@ class KavlingController extends Controller
                     }
 
                     $kavling->update([
-                        'panjang_kanan'    => $panjangKanan,
-                        'panjang_kiri'     => $panjangKiri,
-                        'lebar_depan'      => $lebarDepan,
-                        'lebar_belakang'   => $lebarBelakang,
+                        'panjang'    => $panjangKanan,
+                        'lebar'      => $lebarDepan,
                         'luas_tanah'       => $luasTanah,
                         'luas_bangunan'    => $luasBangunan,
                         'hrg_jual'         => $hrgJual,
